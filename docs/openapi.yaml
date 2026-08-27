@@ -1,0 +1,514 @@
+openapi: 3.0.3
+info:
+  title: CRM Multiindustry API
+  version: 1.0.0
+  description: Versioned REST API for the multi-tenant CRM modular monolith.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Auth
+  - name: CRM
+  - name: Configuration
+  - name: Operations
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+  /auth/me:
+    get:
+      tags: [Auth]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, token, password, password_confirmation]
+              properties:
+                email: { type: string, format: email }
+                token: { type: string }
+                password: { type: string, format: password }
+                password_confirmation: { type: string, format: password }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /auth/password:
+    put:
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, password, password_confirmation]
+              properties:
+                current_password: { type: string, format: password }
+                password: { type: string, format: password }
+                password_confirmation: { type: string, format: password }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /tenants:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Configuration]
+      x-permission: settings.manage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                industry: { type: string }
+                settings: { type: object, additionalProperties: true }
+      responses: { '201': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /tenant:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /contacts:
+    get:
+      tags: [CRM]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Page' }]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+    post:
+      tags: [CRM]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Contact' } }
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /contacts/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [CRM]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [CRM]
+      requestBody:
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Contact' } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+    delete:
+      tags: [CRM]
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+  /organizations:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [CRM]
+      requestBody:
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Organization' } }
+      responses: { '201': { $ref: '#/components/responses/Success' } }
+  /organizations/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /leads:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [CRM]
+      requestBody:
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Lead' } }
+      responses: { '201': { $ref: '#/components/responses/Success' } }
+  /leads/{id}/convert:
+    post:
+      tags: [CRM]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '409': { $ref: '#/components/responses/Error' }
+  /leads/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /deals:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /deals/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /pipelines:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /pipelines/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /tasks:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /tasks/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /activities:
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /field-definitions:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/FieldDefinitionRequest' } }
+      responses: { '201': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /field-definitions/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /entity-definitions:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Configuration]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/EntityDefinitionRequest' } }
+      responses: { '201': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /entity-definitions/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /entities/{entityDefinition}/records:
+    parameters:
+      - name: entityDefinition
+        in: path
+        required: true
+        description: Numeric ID of the custom entity definition.
+        schema: { type: integer, minimum: 1 }
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /entities/{entityDefinition}/records/{id}:
+    parameters:
+      - name: entityDefinition
+        in: path
+        required: true
+        description: Numeric ID of the custom entity definition.
+        schema: { type: integer, minimum: 1 }
+      - { $ref: '#/components/parameters/Id' }
+    get: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [CRM], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /relations:
+    get: { tags: [CRM], x-permission: relations.view, responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [CRM], x-permission: relations.manage, responses: { '201': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+  /relations/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    delete: { tags: [CRM], x-permission: relations.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /automations:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [Configuration], responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /automations/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } } }
+    patch: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+    delete: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /integrations:
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Configuration]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Integration' } }
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /integrations/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    get: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    patch:
+      tags: [Configuration]
+      requestBody:
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/Integration' } }
+      responses: { '200': { $ref: '#/components/responses/Success' } }
+    delete: { tags: [Configuration], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /webhooks/endpoints:
+    get: { tags: [Operations], x-permission: webhooks.view, responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [Operations], x-permission: webhooks.manage, responses: { '201': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } } }
+  /webhooks/endpoints/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    patch: { tags: [Operations], x-permission: webhooks.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+    delete: { tags: [Operations], x-permission: webhooks.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /webhooks/incoming/{endpointId}/{token}:
+    post:
+      tags: [Operations]
+      security: []
+      parameters:
+        - name: endpointId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: token
+          in: path
+          required: true
+          schema: { type: string, pattern: '^[A-Fa-f0-9]{64}$' }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+        - name: X-Webhook-Signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, additionalProperties: true } } }
+      responses: { '202': { $ref: '#/components/responses/Success' }, '401': { $ref: '#/components/responses/Error' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /files:
+    get: { tags: [Operations], responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post:
+      tags: [Operations]
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses: { '201': { $ref: '#/components/responses/Success' } }
+  /files/{id}/download:
+    get:
+      tags: [Operations]
+      parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+      responses: { '200': { $ref: '#/components/responses/Success' }, '404': { $ref: '#/components/responses/Error' } }
+  /files/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    delete: { tags: [Operations], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /imports:
+    post: { tags: [Operations], responses: { '202': { $ref: '#/components/responses/Success' } } }
+  /imports/{id}:
+    get: { tags: [Operations], parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /exports:
+    post: { tags: [Operations], responses: { '202': { $ref: '#/components/responses/Success' } } }
+  /exports/{id}:
+    get: { tags: [Operations], parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }], responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /roles:
+    get: { tags: [Configuration], x-permission: roles.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+    post: { tags: [Configuration], x-permission: roles.manage, responses: { '201': { $ref: '#/components/responses/Success' } } }
+  /roles/{id}:
+    parameters: [{ $ref: '#/components/parameters/TenantHeader' }, { $ref: '#/components/parameters/Id' }]
+    patch: { tags: [Configuration], x-permission: roles.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+    delete: { tags: [Configuration], x-permission: roles.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /users:
+    get: { tags: [Configuration], x-permission: users.manage, responses: { '200': { $ref: '#/components/responses/Success' } } }
+  /users/{user}/role:
+    patch:
+      tags: [Configuration]
+      x-permission: users.manage
+      parameters:
+        - name: user
+          in: path
+          required: true
+          schema: { type: integer }
+      responses: { '200': { $ref: '#/components/responses/Success' }, '422': { $ref: '#/components/responses/ValidationError' } }
+  /audit-logs:
+    get: { tags: [Operations], responses: { '200': { $ref: '#/components/responses/Success' } } }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+  parameters:
+    TenantHeader:
+      name: X-Tenant-ID
+      in: header
+      required: false
+      description: Must identify a tenant membership of the authenticated user.
+      schema: { type: integer }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+  responses:
+    Success:
+      description: Successful response.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Success' }
+    Error:
+      description: Error response.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Validation error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Success:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta: { type: object }
+    Error:
+      type: object
+      required: [message, errors]
+      properties:
+        message: { type: string }
+        errors: { type: object, additionalProperties: { type: array, items: { type: string } } }
+    RegisterRequest:
+      type: object
+      required: [name, email, password, password_confirmation, tenant_name]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        password_confirmation: { type: string, format: password }
+        tenant_name: { type: string }
+        industry: { type: string }
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        tenant_id: { type: integer, minimum: 1 }
+        device_name: { type: string }
+    EntityDefinitionRequest:
+      type: object
+      required: [name, label]
+      properties:
+        name: { type: string, maxLength: 160 }
+        label: { type: string, maxLength: 160 }
+        settings: { type: object, additionalProperties: true }
+        active: { type: boolean }
+    FieldDefinitionRequest:
+      type: object
+      required: [name, label, type]
+      oneOf:
+        - required: [entity_type]
+        - required: [entity_definition_id]
+      properties:
+        entity_type:
+          type: string
+          enum: [contacts, organizations, leads, deals, tasks, activities]
+        entity_definition_id: { type: integer, minimum: 1 }
+        name: { type: string, pattern: '^[a-z][a-z0-9_]{1,79}$' }
+        label: { type: string, maxLength: 160 }
+        type: { type: string }
+        required: { type: boolean }
+        options: { type: array, items: { type: string } }
+        validation_rules: { type: object, additionalProperties: true }
+        default_value: {}
+        position: { type: integer, minimum: 0 }
+        active: { type: boolean }
+    Contact:
+      type: object
+      required: [first_name]
+      properties:
+        first_name: { type: string }
+        last_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        owner_id: { type: integer }
+        status: { type: string }
+        custom_fields: { type: object, additionalProperties: true }
+    Organization:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        website: { type: string, format: uri }
+        custom_fields: { type: object, additionalProperties: true }
+    Lead:
+      type: object
+      properties:
+        first_name: { type: string }
+        last_name: { type: string }
+        email: { type: string, format: email }
+        source: { type: string }
+        status: { type: string }
+        score: { type: integer, minimum: 0, maximum: 100 }
+        custom_fields: { type: object, additionalProperties: true }
+    Deal:
+      type: object
+      required: [pipeline_id, stage_id, name, value, currency]
+      properties:
+        pipeline_id: { type: integer }
+        stage_id: { type: integer }
+        name: { type: string }
+        value: { type: number, format: double }
+        currency: { type: string, minLength: 3, maxLength: 3 }
+        custom_fields: { type: object, additionalProperties: true }
+    Integration:
+      type: object
+      required: [provider, name]
+      properties:
+        provider: { type: string, example: google }
+        name: { type: string }
+        credentials: { type: object, writeOnly: true, additionalProperties: true }
+        settings: { type: object, additionalProperties: true }
+        status: { type: string, enum: [pending, active, disabled] }

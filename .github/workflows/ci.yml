@@ -1,0 +1,50 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DB_CONNECTION: pgsql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: crm_test
+      DB_USERNAME: crm
+      DB_PASSWORD: crm
+      REDIS_HOST: 127.0.0.1
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: crm_test
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: crm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm -d crm_test"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, bcmath, intl, pcntl, posix, redis
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: php artisan migrate --force
+      - name: PHP syntax check
+        run: find app database routes config bootstrap tests -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: vendor/bin/pint --test
+      - run: php artisan test
+      - name: PostgreSQL feature suite
+        run: vendor/bin/pest -c phpunit.postgres.xml
+      - run: composer audit --no-interaction
