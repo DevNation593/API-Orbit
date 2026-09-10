@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\SlaCalendarController;
+use App\Http\Controllers\Api\SlaPolicyController;
 use App\Http\Controllers\Api\SupportAgentController;
 use App\Http\Controllers\Api\SupportCategoryController;
 use App\Http\Controllers\Api\SupportQueueController;
@@ -10,6 +12,8 @@ Route::prefix('support')->middleware(['auth:sanctum', 'tenant.context'])->group(
         ['agents', 'agent', SupportAgentController::class],
         ['categories', 'category', SupportCategoryController::class],
         ['queues', 'queue', SupportQueueController::class],
+        ['sla-calendars', 'calendar', SlaCalendarController::class],
+        ['sla-policies', 'policy', SlaPolicyController::class],
     ] as [$resource, $parameter, $controller]) {
         Route::get($resource, [$controller, 'index']);
         Route::post($resource, [$controller, 'store']);
