@@ -1,7 +1,7 @@
 # API-7.1 — Diseño de tickets y SLA
 
 Fecha: 2026-09-09 (America/Guayaquil).
-Estado: alcance general aprobado en conversación; especificación escrita pendiente de revisión del usuario. No acredita implementación.
+Estado: especificación escrita aprobada explícitamente por el usuario el 2026-09-09. No acredita implementación.
 
 ## 1. Objetivo y límites
 
