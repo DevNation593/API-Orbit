@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\SlaCalendarController;
+use App\Http\Controllers\Api\SlaEscalationController;
 use App\Http\Controllers\Api\SlaPolicyController;
 use App\Http\Controllers\Api\SupportAgentController;
 use App\Http\Controllers\Api\SupportCategoryController;
@@ -9,6 +10,7 @@ use App\Http\Controllers\Api\TicketController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('support')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
+    Route::get('sla-escalations', [SlaEscalationController::class, 'index']);
     foreach ([
         ['agents', 'agent', SupportAgentController::class],
         ['categories', 'category', SupportCategoryController::class],
