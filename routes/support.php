@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\SlaPolicyController;
 use App\Http\Controllers\Api\SupportAgentController;
 use App\Http\Controllers\Api\SupportCategoryController;
 use App\Http\Controllers\Api\SupportQueueController;
+use App\Http\Controllers\Api\TicketController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('support')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
@@ -22,4 +23,13 @@ Route::prefix('support')->middleware(['auth:sanctum', 'tenant.context'])->group(
         Route::delete($resource.'/{'.$parameter.'}', [$controller, 'destroy'])->whereNumber($parameter);
     }
     Route::put('queues/{queue}/agents', [SupportQueueController::class, 'replaceAgents'])->whereNumber('queue');
+});
+
+Route::prefix('tickets')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
+    Route::get('/', [TicketController::class, 'index']);
+    Route::post('/', [TicketController::class, 'store']);
+    Route::get('{ticket}', [TicketController::class, 'show'])->whereNumber('ticket');
+    Route::patch('{ticket}', [TicketController::class, 'update'])->whereNumber('ticket');
+    Route::post('{ticket}/assign', [TicketController::class, 'assign'])->whereNumber('ticket');
+    Route::get('{ticket}/sla', [TicketController::class, 'sla'])->whereNumber('ticket');
 });
