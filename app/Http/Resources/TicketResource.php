@@ -21,6 +21,9 @@ class TicketResource extends JsonResource
             'queue_id', 'assigned_agent_id', 'contact_id', 'organization_id', 'conversation_id',
             'created_by', 'resolution_summary', 'first_response_at', 'resolved_at', 'closed_at',
             'created_at', 'updated_at',
-        ]) + ['assignee_available' => (bool) $available, 'sla' => $ticket->sla?->toArray()];
+        ]) + [
+            'assignee_available' => (bool) $available,
+            'sla' => $ticket->sla === null ? null : (new SlaExecutionResource($ticket->sla))->resolve($request),
+        ];
     }
 }

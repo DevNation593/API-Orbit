@@ -6,12 +6,99 @@ use App\Models\SlaBusinessCalendar;
 use App\Models\SlaExecution;
 use App\Models\SlaPolicy;
 use App\Models\Ticket;
+use App\Support\AuditService;
 use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
 class SlaEngine
 {
-    public function __construct(private readonly SlaCalendarService $calendars) {}
+    public function __construct(
+        private readonly SlaCalendarService $calendars,
+        private readonly SlaEscalationService $escalations,
+        private readonly AuditService $audit,
+    ) {}
+
+    public function recordFirstResponse(Ticket $ticket, CarbonImmutable $at): void
+    {
+        $execution = $ticket->sla;
+        if ($execution === null || $execution->first_response_at !== null) {
+            return;
+        }
+        $execution->first_response_at = $at;
+        $this->evaluate($execution, $at);
+    }
+
+    /** Caller holds ticket then execution locks. Deadlines use a strict comparison. */
+    public function evaluate(SlaExecution $execution, CarbonImmutable $at): void
+    {
+        $breaches = [];
+        $responseAt = $execution->first_response_at ?? $at;
+        if (! $execution->first_response_breached && $execution->first_response_due_at !== null
+            && $responseAt->gt($execution->first_response_due_at)) {
+            $execution->first_response_breached = true;
+            $execution->first_response_breached_at = $execution->first_response_due_at;
+            $breaches['FIRST_RESPONSE'] = $execution->first_response_due_at;
+        }
+        if ($execution->status === 'RUNNING' && ! $execution->resolution_breached
+            && $execution->resolution_due_at !== null && $at->gt($execution->resolution_due_at)) {
+            $execution->resolution_breached = true;
+            $execution->resolution_breached_at = $execution->resolution_due_at;
+            $breaches['RESOLUTION'] = $execution->resolution_due_at;
+        }
+        if ($execution->isDirty()) {
+            $execution->setUpdatedAt($at)->save();
+        }
+        foreach ($breaches as $metric => $deadline) {
+            $this->escalations->record($execution, $metric, $deadline, $at);
+        }
+    }
+
+    public function remaining(SlaExecution $execution, CarbonImmutable $at): int
+    {
+        $budget = (int) $execution->resolution_remaining_seconds;
+        if ($execution->status !== 'RUNNING' || $execution->resolution_anchor_at === null || $budget === 0) {
+            return $budget;
+        }
+        // A recorded due date bounds work even when reading very old executions.
+        $until = $execution->resolution_due_at !== null && $at->gt($execution->resolution_due_at)
+            ? $execution->resolution_due_at : $at;
+
+        return max(0, $budget - $this->calendars->workingSecondsBetween($execution->resolution_anchor_at, $until, $execution->snapshot['calendar']));
+    }
+
+    public function transition(Ticket $ticket, string $from, string $to, CarbonImmutable $at): void
+    {
+        $execution = $ticket->sla;
+        if ($execution === null) {
+            return;
+        }
+        $this->evaluate($execution, $at);
+        $old = $execution->only(['status', 'resolution_due_at', 'resolution_remaining_seconds', 'paused_at', 'resolved_at']);
+        if ($to === 'CLOSED') {
+            $execution->status = 'CLOSED';
+        } elseif ($to === 'RESOLVED') {
+            $execution->resolution_remaining_seconds = $this->remaining($execution, $at);
+            $execution->status = 'RESOLVED';
+            $execution->resolved_at = $at;
+        } elseif ($from === 'RESOLVED' || ($execution->status === 'PAUSED' && $to !== 'WAITING_CUSTOMER')) {
+            $execution->resolution_due_at = $this->calendars->addWorkingSeconds($at, $execution->resolution_remaining_seconds, $execution->snapshot['calendar']);
+            $execution->last_resolution_due_at = $execution->resolution_due_at;
+            $execution->resolution_anchor_at = $at;
+            $execution->paused_at = null;
+            $execution->resolved_at = null;
+            $execution->status = 'RUNNING';
+        } elseif ($to === 'WAITING_CUSTOMER' && $execution->snapshot['pause_on_waiting_customer']) {
+            $execution->resolution_remaining_seconds = $this->remaining($execution, $at);
+            $execution->paused_at = $at;
+            $execution->last_resolution_due_at = $execution->resolution_due_at;
+            $execution->resolution_due_at = null;
+            $execution->status = 'PAUSED';
+        }
+        if ($execution->isDirty()) {
+            $execution->setUpdatedAt($at)->save();
+            $this->audit->record('support.sla.transition', $execution, oldValues: $old, newValues: $execution->only(array_keys($old)));
+        }
+    }
 
     public function start(Ticket $ticket, CarbonImmutable $at): ?SlaExecution
     {

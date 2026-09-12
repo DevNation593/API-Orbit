@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\TicketCommentRequest;
 use App\Http\Requests\TicketRequest;
+use App\Http\Requests\TicketStatusRequest;
+use App\Http\Resources\SlaExecutionResource;
 use App\Http\Resources\TicketResource;
 use App\Models\Ticket;
+use App\Services\TicketCommentService;
 use App\Services\TicketService;
 use App\Support\ApiResponse;
 use App\Support\SupportCatalog;
@@ -18,7 +22,10 @@ use Illuminate\Validation\ValidationException;
 
 class TicketController extends Controller
 {
-    public function __construct(private readonly TicketService $tickets) {}
+    public function __construct(
+        private readonly TicketService $tickets,
+        private readonly TicketCommentService $comments,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -119,12 +126,39 @@ class TicketController extends Controller
         return ApiResponse::success($this->resource($assigned, $request));
     }
 
-    public function sla(int $ticket): JsonResponse
+    public function changeStatus(TicketStatusRequest $request, int $ticket): JsonResponse
+    {
+        $model = Ticket::findOrFail($ticket);
+        Gate::authorize('changeStatus', $model);
+        $data = $request->validated();
+
+        return ApiResponse::success($this->resource($this->tickets->changeStatus($model, $data['status'], $data), $request));
+    }
+
+    public function comments(Request $request, int $ticket): JsonResponse
+    {
+        $model = Ticket::findOrFail($ticket);
+        Gate::authorize('view', $model);
+        $data = $request->validate(['per_page' => ['sometimes', 'integer', 'between:1,100'], 'page' => ['sometimes', 'integer', 'min:1']]);
+
+        return ApiResponse::paginated($model->comments()->orderBy('id')->paginate($data['per_page'] ?? 25)->withQueryString());
+    }
+
+    public function storeComment(TicketCommentRequest $request, int $ticket): JsonResponse
+    {
+        $model = Ticket::findOrFail($ticket);
+        Gate::authorize('view', $model);
+        $result = $this->comments->create($model, $request->validated(), $request->user());
+
+        return ApiResponse::success($result['comment'], [], $result['replayed'] ? 200 : 201);
+    }
+
+    public function sla(Request $request, int $ticket): JsonResponse
     {
         $model = Ticket::findOrFail($ticket);
         Gate::authorize('view', $model);
 
-        return ApiResponse::success($model->sla);
+        return ApiResponse::success($model->sla === null ? null : (new SlaExecutionResource($model->sla))->resolve($request));
     }
 
     private function resource(Ticket $ticket, Request $request): array

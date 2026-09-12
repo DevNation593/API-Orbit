@@ -8,6 +8,15 @@ final class SupportCatalog
 
     public const STATUSES = ['OPEN', 'IN_PROGRESS', 'WAITING_CUSTOMER', 'WAITING_INTERNAL', 'RESOLVED', 'CLOSED'];
 
+    public const TRANSITIONS = [
+        'OPEN' => ['IN_PROGRESS', 'WAITING_CUSTOMER', 'WAITING_INTERNAL', 'RESOLVED'],
+        'IN_PROGRESS' => ['WAITING_CUSTOMER', 'WAITING_INTERNAL', 'RESOLVED'],
+        'WAITING_CUSTOMER' => ['IN_PROGRESS', 'WAITING_INTERNAL', 'RESOLVED'],
+        'WAITING_INTERNAL' => ['IN_PROGRESS', 'WAITING_CUSTOMER', 'RESOLVED'],
+        'RESOLVED' => ['CLOSED', 'IN_PROGRESS'],
+        'CLOSED' => [],
+    ];
+
     public const VISIBILITIES = ['PUBLIC', 'INTERNAL'];
 
     public const CALENDAR_MODES = ['ALWAYS', 'BUSINESS'];

@@ -34,4 +34,19 @@ class TicketPolicy
     {
         return $this->view($user, $ticket) && $this->allowed($user, 'tickets.assign', $ticket);
     }
+
+    public function reply(User $user, Ticket $ticket): bool
+    {
+        return $this->view($user, $ticket) && $this->allowed($user, 'tickets.reply', $ticket);
+    }
+
+    public function commentInternal(User $user, Ticket $ticket): bool
+    {
+        return $this->view($user, $ticket) && $this->allowed($user, 'tickets.comment_internal', $ticket);
+    }
+
+    public function changeStatus(User $user, Ticket $ticket): bool
+    {
+        return $this->view($user, $ticket) && $this->allowed($user, 'tickets.change_status', $ticket);
+    }
 }

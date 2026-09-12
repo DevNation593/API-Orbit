@@ -11,10 +11,12 @@ use App\Models\Ticket;
 use App\Models\TicketCategory;
 use App\Models\User;
 use App\Support\AuditService;
+use App\Support\SupportCatalog;
 use App\Support\TenantContext;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 
 class TicketService
@@ -105,6 +107,47 @@ class TicketService
             $ticket->fill(['queue_id' => $queueId, 'assigned_agent_id' => $agentId]);
             $ticket->setUpdatedAt(now()->toImmutable()->utc()->startOfSecond())->save();
             $this->audit->record('support.ticket.assign', $ticket, oldValues: $old, newValues: $this->auditValues($ticket));
+
+            return $ticket->fresh();
+        });
+    }
+
+    public function changeStatus(Ticket $ticket, string $status, array $data): Ticket
+    {
+        return DB::transaction(function () use ($ticket, $status, $data): Ticket {
+            $ticket = $this->lockTicket($ticket);
+            $from = $ticket->status;
+            if ($from === $status) {
+                return $ticket;
+            }
+            abort_unless(in_array($status, SupportCatalog::TRANSITIONS[$from] ?? [], true), 409, 'This status transition is not allowed.');
+            abort_if(in_array($status, ['WAITING_CUSTOMER', 'RESOLVED'], true) && $ticket->first_response_at === null, 409, 'Record a public response before this transition.');
+            $reopening = $from === 'RESOLVED' && $status === 'IN_PROGRESS';
+            if ($status === 'RESOLVED') {
+                Validator::make($data, ['resolution_summary' => ['required', 'string', 'min:1', 'max:5000']])->validate();
+            }
+            if ($reopening) {
+                Validator::make($data, ['reason' => ['required', 'string', 'min:1', 'max:2000']])->validate();
+            }
+            $at = now()->toImmutable()->utc()->startOfSecond();
+            $old = $ticket->only(['status', 'resolution_summary', 'resolved_at', 'closed_at']);
+            $this->sla->transition($ticket, $from, $status, $at);
+            $ticket->status = $status;
+            if ($status === 'RESOLVED') {
+                $ticket->resolved_at = $at;
+                $ticket->resolution_summary = $data['resolution_summary'];
+            } elseif ($reopening) {
+                $ticket->resolved_at = null;
+                $ticket->resolution_summary = null;
+            } elseif ($status === 'CLOSED') {
+                $ticket->closed_at = $at;
+            }
+            $ticket->setUpdatedAt($at)->save();
+            $new = $ticket->only(array_keys($old));
+            if ($reopening) {
+                $new['reason'] = $data['reason'];
+            }
+            $this->audit->record('support.ticket.status', $ticket, oldValues: $old, newValues: $new);
 
             return $ticket->fresh();
         });

@@ -31,5 +31,8 @@ Route::prefix('tickets')->middleware(['auth:sanctum', 'tenant.context'])->group(
     Route::get('{ticket}', [TicketController::class, 'show'])->whereNumber('ticket');
     Route::patch('{ticket}', [TicketController::class, 'update'])->whereNumber('ticket');
     Route::post('{ticket}/assign', [TicketController::class, 'assign'])->whereNumber('ticket');
+    Route::post('{ticket}/status', [TicketController::class, 'changeStatus'])->whereNumber('ticket');
+    Route::get('{ticket}/comments', [TicketController::class, 'comments'])->whereNumber('ticket');
+    Route::post('{ticket}/comments', [TicketController::class, 'storeComment'])->whereNumber('ticket');
     Route::get('{ticket}/sla', [TicketController::class, 'sla'])->whereNumber('ticket');
 });
