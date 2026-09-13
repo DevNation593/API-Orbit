@@ -1,11 +1,16 @@
 <?php
 
+use App\Http\Controllers\Api\KnowledgeArticleController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
 use App\Http\Controllers\Api\KnowledgeCategoryController;
 use App\Http\Controllers\Api\KnowledgeTagController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('knowledge')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
+    Route::get('articles', [KnowledgeArticleController::class, 'index']);
+    Route::post('articles', [KnowledgeArticleController::class, 'store']);
+    Route::get('articles/{article}', [KnowledgeArticleController::class, 'show'])->whereNumber('article');
+    Route::patch('articles/{article}', [KnowledgeArticleController::class, 'update'])->whereNumber('article');
     Route::get('settings', [KnowledgeBaseController::class, 'show']);
     Route::put('settings', [KnowledgeBaseController::class, 'upsert']);
     Route::get('categories', [KnowledgeCategoryController::class, 'index']);
