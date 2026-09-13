@@ -47,4 +47,9 @@ class KnowledgeArticlePolicy
     {
         return $this->publish($user, $article);
     }
+
+    public function restoreVersion(User $user, KnowledgeArticle $article): bool
+    {
+        return $this->publish($user, $article);
+    }
 }

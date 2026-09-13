@@ -9,6 +9,14 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('knowledge')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
     Route::get('articles', [KnowledgeArticleController::class, 'index']);
     Route::post('articles', [KnowledgeArticleController::class, 'store']);
+    Route::get('articles/{article}/versions', [KnowledgeArticleController::class, 'versions'])->whereNumber('article');
+    Route::get('articles/{article}/versions/{version}', [KnowledgeArticleController::class, 'version'])
+        ->whereNumber('article')->whereNumber('version');
+    Route::post('articles/{article}/versions/{version}/restore', [KnowledgeArticleController::class, 'restoreVersion'])
+        ->whereNumber('article')->whereNumber('version');
+    Route::post('articles/{article}/publish', [KnowledgeArticleController::class, 'publish'])->whereNumber('article');
+    Route::post('articles/{article}/archive', [KnowledgeArticleController::class, 'archive'])->whereNumber('article');
+    Route::post('articles/{article}/restore', [KnowledgeArticleController::class, 'restore'])->whereNumber('article');
     Route::get('articles/{article}', [KnowledgeArticleController::class, 'show'])->whereNumber('article');
     Route::patch('articles/{article}', [KnowledgeArticleController::class, 'update'])->whereNumber('article');
     Route::get('settings', [KnowledgeBaseController::class, 'show']);

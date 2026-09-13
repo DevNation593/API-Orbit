@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\KnowledgeArticleRequest;
+use App\Http\Requests\KnowledgeExpectedVersionRequest;
 use App\Http\Resources\KnowledgeArticleResource;
 use App\Http\Resources\KnowledgeArticleSummaryResource;
+use App\Http\Resources\KnowledgeArticleVersionResource;
 use App\Models\KnowledgeArticle;
+use App\Models\KnowledgeArticleVersion;
 use App\Services\KnowledgeArticleQuery;
 use App\Services\KnowledgeArticleService;
 use App\Support\ApiResponse;
@@ -37,10 +40,7 @@ class KnowledgeArticleController extends Controller
         $page = $this->query->internal($filters)
             ->paginate(ApiResponse::perPage($filters['per_page'] ?? 25))
             ->withQueryString();
-        $page->through(
-            fn (KnowledgeArticle $article): array => (new KnowledgeArticleSummaryResource($article))
-                ->resolve($request)
-        );
+        $page->through(fn (KnowledgeArticle $article): array => (new KnowledgeArticleSummaryResource($article))->resolve($request));
 
         return ApiResponse::paginated($page);
     }
@@ -50,11 +50,7 @@ class KnowledgeArticleController extends Controller
         Gate::authorize('create', KnowledgeArticle::class);
         $article = $this->articles->create($request->validated(), $request->user());
 
-        return ApiResponse::success(
-            (new KnowledgeArticleResource($article))->resolve($request),
-            [],
-            201,
-        );
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request), [], 201);
     }
 
     public function show(Request $request, int $article): JsonResponse
@@ -62,9 +58,7 @@ class KnowledgeArticleController extends Controller
         $model = $this->query->internal([])->findOrFail($article);
         Gate::authorize('view', $model);
 
-        return ApiResponse::success(
-            (new KnowledgeArticleResource($model))->resolve($request),
-        );
+        return ApiResponse::success((new KnowledgeArticleResource($model))->resolve($request));
     }
 
     public function update(KnowledgeArticleRequest $request, int $article): JsonResponse
@@ -73,8 +67,67 @@ class KnowledgeArticleController extends Controller
         Gate::authorize('update', $model);
         $article = $this->articles->revise($model, $request->validated(), $request->user());
 
-        return ApiResponse::success(
-            (new KnowledgeArticleResource($article))->resolve($request),
-        );
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request));
+    }
+
+    public function versions(Request $request, int $article): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('view', $model);
+        $filters = $request->validate([
+            'per_page' => ['sometimes', 'integer', 'between:1,100'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+        ]);
+        $page = $model->versions()->with(['category', 'tags'])
+            ->paginate(ApiResponse::perPage($filters['per_page'] ?? 25))
+            ->withQueryString();
+        $page->through(fn (KnowledgeArticleVersion $version): array => (new KnowledgeArticleVersionResource($version))->resolve($request));
+
+        return ApiResponse::paginated($page);
+    }
+
+    public function version(Request $request, int $article, int $version): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('view', $model);
+        $snapshot = $this->articles->version($model, $version);
+
+        return ApiResponse::success((new KnowledgeArticleVersionResource($snapshot))->resolve($request));
+    }
+
+    public function publish(KnowledgeExpectedVersionRequest $request, int $article): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('publish', $model);
+        $article = $this->articles->publish($model, $request->integer('expected_version'), $request->user());
+
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request));
+    }
+
+    public function archive(Request $request, int $article): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('archive', $model);
+        $article = $this->articles->archive($model, $request->user());
+
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request));
+    }
+
+    public function restore(Request $request, int $article): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('restore', $model);
+        $article = $this->articles->restore($model, $request->user());
+
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request));
+    }
+
+    public function restoreVersion(KnowledgeExpectedVersionRequest $request, int $article, int $version): JsonResponse
+    {
+        $model = KnowledgeArticle::findOrFail($article);
+        Gate::authorize('restoreVersion', $model);
+        $article = $this->articles->restoreVersion($model, $version, $request->integer('expected_version'), $request->user());
+
+        return ApiResponse::success((new KnowledgeArticleResource($article))->resolve($request), [], 201);
     }
 }

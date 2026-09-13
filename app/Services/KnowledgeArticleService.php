@@ -101,6 +101,86 @@ class KnowledgeArticleService
         });
     }
 
+    public function publish(KnowledgeArticle $article, int $expectedVersion, User $actor): KnowledgeArticle
+    {
+        return $this->database->transaction(function () use ($article, $expectedVersion, $actor): KnowledgeArticle {
+            $article = KnowledgeArticle::query()->lockForUpdate()->findOrFail($article->id);
+            $current = $article->currentVersion()->with(['category', 'tags'])->firstOrFail();
+            if ($expectedVersion !== (int) $current->version) {
+                abort(409, 'The article has a newer version.');
+            }
+            if ($article->status === 'ARCHIVED') {
+                abort(409, 'Restore the archived article before publishing it.');
+            }
+            if ($article->status === 'PUBLISHED' && (int) $article->published_version_id === (int) $current->id) {
+                return $this->loadArticle($article);
+            }
+            $previous = $this->lifecycleState($article, (int) $current->version);
+            $article->forceFill(['status' => 'PUBLISHED', 'published_version_id' => $current->id, 'published_at' => now(), 'archived_at' => null, 'updated_by' => $actor->id])->save();
+            $this->auditLifecycle('knowledge.article.published', $article, $previous);
+
+            return $this->loadArticle($article);
+        });
+    }
+
+    public function archive(KnowledgeArticle $article, User $actor): KnowledgeArticle
+    {
+        return $this->database->transaction(function () use ($article, $actor): KnowledgeArticle {
+            $article = KnowledgeArticle::query()->lockForUpdate()->findOrFail($article->id);
+            $current = $article->currentVersion()->firstOrFail();
+            if ($article->status === 'ARCHIVED') {
+                return $this->loadArticle($article);
+            }
+            if (! in_array($article->status, ['DRAFT', 'PUBLISHED'], true)) {
+                abort(409, 'The article cannot be archived from its current state.');
+            }
+            $previous = $this->lifecycleState($article, (int) $current->version);
+            $article->forceFill(['status' => 'ARCHIVED', 'archived_at' => now(), 'updated_by' => $actor->id])->save();
+            $this->auditLifecycle('knowledge.article.archived', $article, $previous);
+
+            return $this->loadArticle($article);
+        });
+    }
+
+    public function restore(KnowledgeArticle $article, User $actor): KnowledgeArticle
+    {
+        return $this->database->transaction(function () use ($article, $actor): KnowledgeArticle {
+            $article = KnowledgeArticle::query()->lockForUpdate()->findOrFail($article->id);
+            $current = $article->currentVersion()->firstOrFail();
+            if ($article->status !== 'ARCHIVED') {
+                abort(409, 'Only archived articles can be restored.');
+            }
+            $previous = $this->lifecycleState($article, (int) $current->version);
+            $article->forceFill(['status' => 'DRAFT', 'published_version_id' => null, 'published_at' => null, 'archived_at' => null, 'updated_by' => $actor->id])->save();
+            $this->auditLifecycle('knowledge.article.restored', $article, $previous);
+
+            return $this->loadArticle($article);
+        });
+    }
+
+    public function restoreVersion(KnowledgeArticle $article, int $number, int $expectedVersion, User $actor): KnowledgeArticle
+    {
+        return $this->database->transaction(function () use ($article, $number, $expectedVersion, $actor): KnowledgeArticle {
+            $article = KnowledgeArticle::query()->lockForUpdate()->findOrFail($article->id);
+            $current = $article->currentVersion()->firstOrFail();
+            if ($article->status === 'ARCHIVED') {
+                abort(409, 'Restore the archived article before restoring a version.');
+            }
+            if ($expectedVersion !== (int) $current->version) {
+                abort(409, 'The article has a newer version.');
+            }
+            $source = $article->versions()->with('tags')->where('version', $number)->firstOrFail();
+            $snapshot = Arr::only($source->getAttributes(), self::VERSION_FIELDS);
+            $snapshot['tag_ids'] = $source->tags->modelKeys();
+            $version = $this->createVersion($article, (int) $current->version + 1, $snapshot, $actor);
+            $previous = $this->lifecycleState($article, (int) $current->version);
+            $article->forceFill(['current_version_id' => $version->id, 'updated_by' => $actor->id])->save();
+            $this->auditLifecycle('knowledge.article.version_restored', $article, $previous);
+
+            return $this->loadArticle($article);
+        });
+    }
+
     public function version(KnowledgeArticle $article, int $number): KnowledgeArticleVersion
     {
         return $article->versions()
@@ -200,6 +280,28 @@ class KnowledgeArticleService
                 'version' => (int) $version->version,
                 'changed_fields' => $changedFields,
             ],
+        );
+    }
+
+    /** @return array{version: int, state: string, current_version_id: ?int, published_version_id: ?int} */
+    private function lifecycleState(KnowledgeArticle $article, int $version): array
+    {
+        return [
+            'version' => $version,
+            'state' => $article->status,
+            'current_version_id' => $article->current_version_id,
+            'published_version_id' => $article->published_version_id,
+        ];
+    }
+
+    /** @param array{version: int, state: string, current_version_id: ?int, published_version_id: ?int} $previous */
+    private function auditLifecycle(string $action, KnowledgeArticle $article, array $previous): void
+    {
+        $this->audit->record(
+            $action,
+            $article,
+            oldValues: $previous,
+            newValues: $this->lifecycleState($article, (int) $article->currentVersion()->value('version')),
         );
     }
 }
