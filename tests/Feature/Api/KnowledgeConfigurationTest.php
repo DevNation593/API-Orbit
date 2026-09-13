@@ -5,9 +5,13 @@ namespace Tests\Feature\Api;
 use App\Models\AuditLog;
 use App\Models\KnowledgeArticle;
 use App\Models\KnowledgeArticleVersion;
+use App\Models\KnowledgeBase;
+use App\Models\KnowledgeCategory;
+use App\Models\KnowledgeTag;
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\Support\KnowledgeTestCase;
@@ -126,6 +130,13 @@ class KnowledgeConfigurationTest extends KnowledgeTestCase
             'public_id' => '11111111-1111-4111-8111-111111111111',
             'normalized_name' => 'controlled',
             'created_by' => 99,
+            'updated_by' => 99,
+            'author_id' => 99,
+            'status' => 'PUBLISHED',
+            'current_version_id' => 99,
+            'published_version_id' => 99,
+            'published_at' => '2026-09-12 00:00:00',
+            'archived_at' => '2026-09-12 00:00:00',
             'created_at' => '2026-09-12 00:00:00',
             'updated_at' => '2026-09-12 00:00:00',
             'slug' => 'readable-id',
@@ -137,6 +148,103 @@ class KnowledgeConfigurationTest extends KnowledgeTestCase
                     ->assertUnprocessable()->assertJsonValidationErrors($field);
             }
         }
+    }
+
+    public function test_base_upsert_retries_a_tenant_unique_race(): void
+    {
+        $client = $this->createTenantUser();
+        $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', $client['tenant']->id);
+        $injected = false;
+
+        KnowledgeBase::creating(function (KnowledgeBase $base) use (&$injected, $client): void {
+            if ($injected || $base->title !== 'Race-safe base') {
+                return;
+            }
+
+            $injected = true;
+            DB::table('knowledge_bases')->insert([
+                'tenant_id' => $client['tenant']->id,
+                'public_id' => (string) Str::uuid(),
+                'title' => 'Concurrent base',
+                'description' => null,
+                'is_public' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $api->putJson('/api/v1/knowledge/settings', [
+            'title' => 'Race-safe base',
+            'is_public' => true,
+        ])->assertCreated()
+            ->assertJsonPath('data.title', 'Race-safe base')
+            ->assertJsonPath('data.is_public', true);
+
+        $this->assertTrue($injected);
+        $this->assertDatabaseCount('knowledge_bases', 1);
+    }
+
+    public function test_category_unique_races_are_mapped_to_conflict(): void
+    {
+        $client = $this->createTenantUser();
+        $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', $client['tenant']->id);
+        $injected = false;
+
+        KnowledgeCategory::creating(function (KnowledgeCategory $category) use (&$injected, $client): void {
+            if ($injected || $category->name !== 'Race category') {
+                return;
+            }
+
+            $injected = true;
+            DB::table('knowledge_categories')->insert([
+                'tenant_id' => $client['tenant']->id,
+                'created_by' => $client['user']->id,
+                'name' => 'Concurrent category',
+                'normalized_name' => $category->normalized_name,
+                'description' => null,
+                'position' => 0,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $api->postJson('/api/v1/knowledge/categories', ['name' => 'Race category'])
+            ->assertConflict();
+
+        $this->assertTrue($injected);
+        $this->assertDatabaseCount('knowledge_categories', 0);
+    }
+
+    public function test_tag_unique_races_are_mapped_to_conflict(): void
+    {
+        $client = $this->createTenantUser();
+        $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', $client['tenant']->id);
+        $injected = false;
+
+        KnowledgeTag::creating(function (KnowledgeTag $tag) use (&$injected, $client): void {
+            if ($injected || $tag->name !== 'Race tag') {
+                return;
+            }
+
+            $injected = true;
+            DB::table('knowledge_tags')->insert([
+                'tenant_id' => $client['tenant']->id,
+                'created_by' => $client['user']->id,
+                'name' => 'Concurrent tag',
+                'normalized_name' => $tag->normalized_name,
+                'description' => null,
+                'is_active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
+
+        $api->postJson('/api/v1/knowledge/tags', ['name' => 'Race tag'])
+            ->assertConflict();
+
+        $this->assertTrue($injected);
+        $this->assertDatabaseCount('knowledge_tags', 0);
     }
 
     public function test_catalog_queries_escape_like_wildcards_and_validate_filters(): void

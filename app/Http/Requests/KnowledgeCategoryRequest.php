@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-class KnowledgeCategoryRequest extends BaseApiRequest
+class KnowledgeCategoryRequest extends KnowledgeRequest
 {
     public function rules(): array
     {
@@ -13,13 +13,5 @@ class KnowledgeCategoryRequest extends BaseApiRequest
             'is_active' => ['sometimes', 'boolean'],
             ...$this->serverControlledRules(),
         ];
-    }
-
-    private function serverControlledRules(): array
-    {
-        return array_fill_keys([
-            'id', 'tenant_id', 'public_id', 'normalized_name', 'created_by',
-            'created_at', 'updated_at', 'slug',
-        ], ['missing']);
     }
 }

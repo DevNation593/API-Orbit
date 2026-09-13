@@ -2,7 +2,7 @@
 
 namespace App\Http\Requests;
 
-class KnowledgeBaseRequest extends BaseApiRequest
+class KnowledgeBaseRequest extends KnowledgeRequest
 {
     public function rules(): array
     {
@@ -12,13 +12,5 @@ class KnowledgeBaseRequest extends BaseApiRequest
             'is_public' => ['sometimes', 'boolean'],
             ...$this->serverControlledRules(),
         ];
-    }
-
-    private function serverControlledRules(): array
-    {
-        return array_fill_keys([
-            'id', 'tenant_id', 'public_id', 'normalized_name', 'created_by',
-            'created_at', 'updated_at', 'slug',
-        ], ['missing']);
     }
 }

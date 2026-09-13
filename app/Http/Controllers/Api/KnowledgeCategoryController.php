@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Http\Controllers\Controller;
 use App\Http\Requests\KnowledgeCategoryRequest;
 use App\Models\KnowledgeCategory;
 use App\Services\KnowledgeConfigurationService;
@@ -11,26 +10,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
-class KnowledgeCategoryController extends Controller
+class KnowledgeCategoryController extends KnowledgeCatalogController
 {
     public function __construct(private readonly KnowledgeConfigurationService $configuration) {}
 
     public function index(Request $request): JsonResponse
     {
         Gate::authorize('viewAny', KnowledgeCategory::class);
-        $data = $request->validate([
-            'q' => ['sometimes', 'string', 'max:120'],
-            'active' => ['sometimes', 'boolean'],
-            'per_page' => ['sometimes', 'integer', 'between:1,100'],
-        ]);
-        $query = KnowledgeCategory::query();
-        if (array_key_exists('active', $data)) {
-            $query->where('is_active', $data['active']);
-        }
-        if (filled($data['q'] ?? null)) {
-            $search = $this->escapedSearch((string) $data['q']);
-            $query->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", ['%'.$search.'%']);
-        }
+        $data = $this->catalogFilters($request);
+        $query = $this->applyCatalogFilters(KnowledgeCategory::query(), $data);
 
         return ApiResponse::paginated(
             $query->orderBy('position')->orderBy('name')->orderBy('id')
@@ -76,14 +64,5 @@ class KnowledgeCategoryController extends Controller
         $this->configuration->deleteCatalog($model);
 
         return ApiResponse::success(['deleted' => true]);
-    }
-
-    private function escapedSearch(string $value): string
-    {
-        return str_replace(
-            ['!', '%', '_'],
-            ['!!', '!%', '!_'],
-            mb_strtolower(trim($value)),
-        );
     }
 }
