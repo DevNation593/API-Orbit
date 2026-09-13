@@ -23,6 +23,7 @@ final class PermissionCatalog
         'imports.create', 'exports.create',
         'webhooks.view', 'webhooks.manage',
         'integrations.view', 'integrations.manage',
+        'knowledge.view', 'knowledge.manage', 'knowledge.publish',
         'reports.view', 'audit.view',
         'users.manage', 'roles.manage', 'settings.manage',
     ];

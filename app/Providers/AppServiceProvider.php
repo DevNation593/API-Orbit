@@ -15,6 +15,11 @@ use App\Models\EntityDefinition;
 use App\Models\EntityRecord;
 use App\Models\FieldDefinition;
 use App\Models\FileRecord;
+use App\Models\KnowledgeArticle;
+use App\Models\KnowledgeArticleVersion;
+use App\Models\KnowledgeBase;
+use App\Models\KnowledgeCategory;
+use App\Models\KnowledgeTag;
 use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Pipeline;
@@ -26,6 +31,7 @@ use App\Policies\ContactPolicy;
 use App\Policies\DealPolicy;
 use App\Policies\EntityDefinitionPolicy;
 use App\Policies\FieldDefinitionPolicy;
+use App\Policies\KnowledgePolicy;
 use App\Policies\LeadPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\PipelinePolicy;
@@ -66,6 +72,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(EntityDefinition::class, EntityDefinitionPolicy::class);
         Gate::policy(Automation::class, AutomationPolicy::class);
         Gate::policy(Activity::class, ActivityPolicy::class);
+
+        foreach ([KnowledgeBase::class, KnowledgeCategory::class, KnowledgeTag::class, KnowledgeArticle::class, KnowledgeArticleVersion::class] as $model) {
+            Gate::policy($model, KnowledgePolicy::class);
+        }
 
         Relation::enforceMorphMap([
             'user' => User::class,
