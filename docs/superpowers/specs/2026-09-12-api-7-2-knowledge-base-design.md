@@ -1,7 +1,7 @@
 # API-7.2 — Diseño de Base de Conocimiento
 
 Fecha: 2026-09-12 (America/Guayaquil).
-Estado: diseño conversacional aprobado por el usuario el 2026-09-12; pendiente de revisión de esta especificación escrita. No acredita implementación.
+Estado: especificación escrita aprobada por el usuario el 2026-09-12 al solicitar continuar con el siguiente paso. No acredita implementación.
 
 ## 1. Objetivo y alcance
 
