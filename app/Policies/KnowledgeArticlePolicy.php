@@ -22,12 +22,14 @@ class KnowledgeArticlePolicy
 
     public function create(User $user): bool
     {
-        return $this->allowed($user, 'knowledge.manage');
+        return $this->viewAny($user)
+            && $this->allowed($user, 'knowledge.manage');
     }
 
     public function update(User $user, KnowledgeArticle $article): bool
     {
-        return $this->allowed($user, 'knowledge.manage', $article);
+        return $this->view($user, $article)
+            && $this->allowed($user, 'knowledge.manage', $article);
     }
 
     public function publish(User $user, KnowledgeArticle $article): bool

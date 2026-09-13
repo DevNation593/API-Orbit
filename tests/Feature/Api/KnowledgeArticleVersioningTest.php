@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Models\AuditLog;
 use App\Models\KnowledgeArticle;
 use App\Models\KnowledgeArticleVersion;
+use App\Models\Permission;
 use App\Services\KnowledgeArticleService;
 use App\Support\TenantContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -153,6 +154,42 @@ class KnowledgeArticleVersioningTest extends KnowledgeTestCase
         $this->patchJson('/api/v1/knowledge/articles/'.$id, [
             'expected_version' => 1,
             'title' => 'Denied',
+        ])->assertForbidden();
+    }
+
+    public function test_manage_without_view_permission_cannot_create_articles(): void
+    {
+        $client = $this->knowledgeFixture();
+        $client['user']->memberships()->firstOrFail()->role->permissions()->detach(
+            Permission::where('key', 'knowledge.view')->value('id'),
+        );
+        $this->assertTrue($client['user']->hasPermission('knowledge.manage'));
+        $this->assertFalse($client['user']->hasPermission('knowledge.view'));
+        $this->authenticateKnowledge($client);
+
+        $this->postJson('/api/v1/knowledge/articles', $this->articlePayload())
+            ->assertForbidden();
+    }
+
+    public function test_manage_without_view_permission_cannot_update_articles(): void
+    {
+        $client = $this->knowledgeFixture();
+        $this->authenticateKnowledge($client);
+        $id = $this->postJson('/api/v1/knowledge/articles', $this->articlePayload())
+            ->assertCreated()->json('data.id');
+
+        $client['user']->memberships()->firstOrFail()->role->permissions()->detach(
+            Permission::where('key', 'knowledge.view')->value('id'),
+        );
+        app(TenantContext::class)->set((int) $client['tenant']->id);
+        $this->assertTrue($client['user']->hasPermission('knowledge.manage'));
+        $this->assertFalse($client['user']->hasPermission('knowledge.view'));
+        $this->app['auth']->forgetGuards();
+        $this->authenticateKnowledge($client);
+
+        $this->patchJson('/api/v1/knowledge/articles/'.$id, [
+            'expected_version' => 1,
+            'title' => 'Denied update',
         ])->assertForbidden();
     }
 
