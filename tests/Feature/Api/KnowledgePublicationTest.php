@@ -4,6 +4,8 @@ namespace Tests\Feature\Api;
 
 use App\Models\AuditLog;
 use App\Models\KnowledgeArticleVersion;
+use App\Models\Permission;
+use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Support\KnowledgeTestCase;
@@ -118,6 +120,73 @@ class KnowledgePublicationTest extends KnowledgeTestCase
             'expected_version' => 1,
             'status' => 'PUBLISHED',
         ])->assertUnprocessable()->assertJsonValidationErrors('status');
+    }
+
+    public function test_manager_with_view_can_restore_a_historical_version_without_publish_permission(): void
+    {
+        $manager = $this->knowledgeFixture(['knowledge.view', 'knowledge.manage']);
+        $this->authenticateKnowledge($manager);
+        $id = $this->createKnowledgeArticle($manager, '<p>Version one</p>')['id'];
+        $this->patchJson('/api/v1/knowledge/articles/'.$id, [
+            'expected_version' => 1,
+            'body_html' => '<p>Version two</p>',
+        ])->assertOk();
+
+        $this->postJson('/api/v1/knowledge/articles/'.$id.'/versions/1/restore', [
+            'expected_version' => 2,
+        ])->assertCreated()
+            ->assertJsonPath('data.current_version.version', 3)
+            ->assertJsonPath('data.current_version.body_html', '<p>Version one</p>');
+    }
+
+    public function test_publisher_with_view_cannot_restore_a_historical_version_without_manage_permission(): void
+    {
+        $publisher = $this->knowledgeFixture();
+        $this->authenticateKnowledge($publisher);
+        $id = $this->createKnowledgeArticle($publisher, '<p>Version one</p>')['id'];
+        $this->patchJson('/api/v1/knowledge/articles/'.$id, [
+            'expected_version' => 1,
+            'body_html' => '<p>Version two</p>',
+        ])->assertOk();
+
+        $publisher['user']->memberships()->firstOrFail()->role->permissions()->detach(
+            Permission::where('key', 'knowledge.manage')->value('id'),
+        );
+        app(TenantContext::class)->set((int) $publisher['tenant']->id);
+        $this->app['auth']->forgetGuards();
+        $this->authenticateKnowledge($publisher);
+
+        $this->assertTrue($publisher['user']->hasPermission('knowledge.view'));
+        $this->assertTrue($publisher['user']->hasPermission('knowledge.publish'));
+        $this->assertFalse($publisher['user']->hasPermission('knowledge.manage'));
+        $this->postJson('/api/v1/knowledge/articles/'.$id.'/versions/1/restore', [
+            'expected_version' => 2,
+        ])->assertForbidden();
+    }
+
+    public function test_viewer_cannot_restore_a_historical_version(): void
+    {
+        $viewer = $this->knowledgeFixture();
+        $this->authenticateKnowledge($viewer);
+        $id = $this->createKnowledgeArticle($viewer, '<p>Version one</p>')['id'];
+        $this->patchJson('/api/v1/knowledge/articles/'.$id, [
+            'expected_version' => 1,
+            'body_html' => '<p>Version two</p>',
+        ])->assertOk();
+
+        $viewer['user']->memberships()->firstOrFail()->role->permissions()->detach(
+            Permission::query()->whereIn('key', ['knowledge.manage', 'knowledge.publish'])->pluck('id'),
+        );
+        app(TenantContext::class)->set((int) $viewer['tenant']->id);
+        $this->app['auth']->forgetGuards();
+        $this->authenticateKnowledge($viewer);
+
+        $this->assertTrue($viewer['user']->hasPermission('knowledge.view'));
+        $this->assertFalse($viewer['user']->hasPermission('knowledge.manage'));
+        $this->assertFalse($viewer['user']->hasPermission('knowledge.publish'));
+        $this->postJson('/api/v1/knowledge/articles/'.$id.'/versions/1/restore', [
+            'expected_version' => 2,
+        ])->assertForbidden();
     }
 
     public function test_archive_is_idempotent_and_restore_returns_archived_article_to_draft_without_a_public_snapshot(): void
