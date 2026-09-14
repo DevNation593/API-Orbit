@@ -101,3 +101,7 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(TaskCompleted::class, DispatchAutomation::class);
     }
 }
+        RateLimiter::for('public-knowledge', fn ($request) => [
+            Limit::perMinute(60)->by((string) $request->route('basePublicId').'|'.$request->ip()),
+            Limit::perDay(1000)->by((string) $request->route('basePublicId').'|'.$request->ip()),
+        ]);

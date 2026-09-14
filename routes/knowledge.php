@@ -4,7 +4,18 @@ use App\Http\Controllers\Api\KnowledgeArticleController;
 use App\Http\Controllers\Api\KnowledgeBaseController;
 use App\Http\Controllers\Api\KnowledgeCategoryController;
 use App\Http\Controllers\Api\KnowledgeTagController;
+use App\Http\Controllers\Api\PublicKnowledgeController;
 use Illuminate\Support\Facades\Route;
+
+Route::prefix('public/knowledge/{basePublicId}')
+    ->middleware('throttle:public-knowledge')
+    ->whereUuid('basePublicId')
+    ->group(function (): void {
+        Route::get('', [PublicKnowledgeController::class, 'home']);
+        Route::get('categories', [PublicKnowledgeController::class, 'categories']);
+        Route::get('articles', [PublicKnowledgeController::class, 'articles']);
+        Route::get('articles/{articlePublicId}', [PublicKnowledgeController::class, 'article'])->whereUuid('articlePublicId');
+    });
 
 Route::prefix('knowledge')->middleware(['auth:sanctum', 'tenant.context'])->group(function (): void {
     Route::get('articles', [KnowledgeArticleController::class, 'index']);
