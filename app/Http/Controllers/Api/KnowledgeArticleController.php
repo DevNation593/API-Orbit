@@ -34,6 +34,16 @@ class KnowledgeArticleController extends Controller
             'visibility' => ['sometimes', Rule::in(['PUBLIC', 'CUSTOMER', 'INTERNAL'])],
             'category_id' => ['sometimes', 'integer', 'min:1'],
             'tag_id' => ['sometimes', 'integer', 'min:1'],
+            'has_unpublished_changes' => ['sometimes', 'boolean'],
+            'created_from' => ['sometimes', 'date_format:Y-m-d'],
+            'created_to' => ['sometimes', 'date_format:Y-m-d'],
+            'sort' => ['sometimes', Rule::in([
+                'created_at',
+                'updated_at',
+                'published_at',
+                'title',
+            ])],
+            'direction' => ['sometimes', Rule::in(['asc', 'desc'])],
             'per_page' => ['sometimes', 'integer', 'between:1,100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ]);
