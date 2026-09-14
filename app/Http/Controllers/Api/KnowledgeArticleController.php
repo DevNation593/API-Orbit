@@ -15,6 +15,7 @@ use App\Services\KnowledgeArticleService;
 use App\Support\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
@@ -91,7 +92,10 @@ class KnowledgeArticleController extends Controller
         $page = $model->versions()->with(['category', 'tags'])
             ->paginate(ApiResponse::perPage($filters['per_page'] ?? 25))
             ->withQueryString();
-        $page->through(fn (KnowledgeArticleVersion $version): array => (new KnowledgeArticleVersionResource($version))->resolve($request));
+        $page->through(fn (KnowledgeArticleVersion $version): array => Arr::except(
+            (new KnowledgeArticleVersionResource($version))->resolve($request),
+            ['body_html'],
+        ));
 
         return ApiResponse::paginated($page);
     }

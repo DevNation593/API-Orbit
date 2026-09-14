@@ -189,6 +189,56 @@ class KnowledgeSecurityTest extends KnowledgeTestCase
             ->where('article_id', $article['id'])->count());
     }
 
+    public function test_article_creation_rejects_inactive_and_foreign_catalog_references_without_disclosure(): void
+    {
+        $owner = $this->knowledgeFixture();
+        $this->authenticateKnowledge($owner);
+        app(TenantContext::class)->set((int) $owner['tenant']->id);
+        $inactiveCategory = KnowledgeCategory::create([
+            'name' => 'SECRET INACTIVE CATEGORY',
+            'normalized_name' => 'secret inactive category',
+            'position' => 20,
+            'is_active' => false,
+            'created_by' => $owner['user']->id,
+        ]);
+        $inactiveTag = KnowledgeTag::create([
+            'name' => 'SECRET INACTIVE TAG',
+            'normalized_name' => 'secret inactive tag',
+            'is_active' => false,
+            'created_by' => $owner['user']->id,
+        ]);
+
+        $foreign = $this->knowledgeFixture();
+        $foreign['category']->update(['name' => 'SECRET FOREIGN CATEGORY']);
+        $foreign['tag']->update(['name' => 'SECRET FOREIGN TAG']);
+        $this->reauthenticateKnowledge($owner);
+        $cases = [
+            ['category_id', $inactiveCategory->id, 'category_id'],
+            ['tag_ids', [$inactiveTag->id], 'tag_ids'],
+            ['category_id', $foreign['category']->id, 'category_id'],
+            ['tag_ids', [$foreign['tag']->id], 'tag_ids'],
+        ];
+        $privateNames = [
+            'SECRET INACTIVE CATEGORY',
+            'SECRET INACTIVE TAG',
+            'SECRET FOREIGN CATEGORY',
+            'SECRET FOREIGN TAG',
+        ];
+
+        foreach ($cases as [$field, $value, $error]) {
+            $response = $this->postJson(
+                '/api/v1/knowledge/articles',
+                $this->articlePayload($owner, [$field => $value]),
+            )->assertUnprocessable()->assertJsonValidationErrors($error);
+            foreach ($privateNames as $privateName) {
+                $this->assertStringNotContainsString($privateName, $response->getContent());
+            }
+        }
+
+        $this->assertDatabaseCount('knowledge_articles', 0);
+        $this->assertDatabaseCount('knowledge_article_versions', 0);
+    }
+
     public function test_internal_ids_and_public_uuids_are_strict_route_constraints(): void
     {
         $client = $this->knowledgeFixture();
@@ -425,6 +475,43 @@ class KnowledgeSecurityTest extends KnowledgeTestCase
 
         $this->assertSame(1, KnowledgeArticleVersion::query()
             ->where('article_id', $article['id'])->count());
+    }
+
+    public function test_version_list_omits_private_body_while_single_version_detail_includes_it(): void
+    {
+        $client = $this->knowledgeFixture();
+        $this->authenticateKnowledge($client);
+        $article = $this->createKnowledgeArticle($client, [
+            'body_html' => '<p>PRIVATE_VERSION_BODY_V1</p>',
+        ]);
+        $root = '/api/v1/knowledge/articles/'.$article['id'];
+        $this->patchJson($root, [
+            'expected_version' => 1,
+            'body_html' => '<p>PRIVATE_VERSION_BODY_V2</p>',
+        ])->assertOk();
+
+        $versions = $this->getJson($root.'/versions')->assertOk()->assertJsonCount(2, 'data');
+        $this->assertStringNotContainsString('PRIVATE_VERSION_BODY', $versions->getContent());
+        $versions->assertJsonMissingPath('data.0.body_html')
+            ->assertJsonMissingPath('data.1.body_html');
+
+        $this->getJson($root.'/versions/1')->assertOk()
+            ->assertJsonPath('data.body_html', '<p>PRIVATE_VERSION_BODY_V1</p>');
+    }
+
+    public function test_public_categories_recursively_omit_internal_projection_keys(): void
+    {
+        $client = $this->knowledgeFixture(public: true);
+        $this->authenticateKnowledge($client);
+        $article = $this->createKnowledgeArticle($client);
+        $this->postJson('/api/v1/knowledge/articles/'.$article['id'].'/publish', [
+            'expected_version' => 1,
+        ])->assertOk();
+
+        $categories = $this->publicGet(
+            '/api/v1/public/knowledge/'.$client['base']->public_id.'/categories',
+        )->assertOk()->assertJsonCount(1, 'data');
+        $this->assertPublicKeysAreSafe($categories->json('data'));
     }
 
     public function test_audits_lists_history_and_public_projection_preserve_privacy_and_snapshots(): void
