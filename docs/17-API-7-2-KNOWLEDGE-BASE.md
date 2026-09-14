@@ -24,9 +24,11 @@ El HTML de `body_html` se sanea. Los listados de artículos, versiones y auditor
 
 ## Rutas públicas
 
-Las cuatro consultas públicas de lectura del flujo son:
+Las cuatro operaciones públicas son:
 
 ```text
+GET /api/v1/public/knowledge/{basePublicId}
+GET /api/v1/public/knowledge/{basePublicId}/categories
 GET /api/v1/public/knowledge/{basePublicId}/articles
 GET /api/v1/public/knowledge/{basePublicId}/articles/{articlePublicId}
 ```

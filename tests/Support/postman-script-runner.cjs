@@ -20,6 +20,9 @@ try {
     if (input.request?.headers !== undefined && (input.request.headers === null || typeof input.request.headers !== 'object' || Array.isArray(input.request.headers))) {
         throw new TypeError('request.headers must be an object.');
     }
+    if (input.request?.auth !== undefined && (input.request.auth === null || typeof input.request.auth !== 'object' || Array.isArray(input.request.auth) || typeof input.request.auth.type !== 'string')) {
+        throw new TypeError('request.auth must be an object with a string type.');
+    }
 
     const sandbox = Object.create(null);
     sandbox.__postmanInputJson = JSON.stringify(input);
@@ -83,7 +86,10 @@ try {
                     headerValues[normalized] = safeString(header.value ?? '');
                 },
             });
-            const request = Object.freeze({ headers: requestHeaders });
+            const request = Object.freeze({
+                headers: requestHeaders,
+                auth: Object.freeze({ type: safeString(input.request?.auth?.type ?? '') }),
+            });
             const have = Object.freeze({
                 status(expected) {
                     if (input.response.status !== expected) {

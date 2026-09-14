@@ -12,6 +12,41 @@ class KnowledgePostmanWorkflowTest extends KnowledgeTestCase
 {
     use RefreshDatabase;
 
+    public function test_collection_prerequest_keeps_public_knowledge_requests_free_of_tenant_headers(): void
+    {
+        $collection = json_decode(file_get_contents(base_path('docs/postman/Vantex CRM API.postman_collection.json')), true, flags: JSON_THROW_ON_ERROR);
+        $scripts = collect($collection['event'] ?? [])->where('listen', 'prerequest')
+            ->flatMap(fn (array $event): array => $event['script']['exec'])->all();
+        $folder = collect($collection['item'])->firstWhere('name', '13 - API-7.2 base de conocimiento');
+        $this->assertNotEmpty($scripts);
+        $this->assertNotNull($folder);
+
+        foreach ($folder['item'] as $index => $item) {
+            $public = in_array($index, [8, 9, 11, 14, 16], true);
+            $runner = new Process(['node', base_path('tests/Support/postman-script-runner.cjs')]);
+            $runner->setInput(json_encode([
+                'scripts' => $scripts,
+                'variables' => ['tenant_id' => '321'],
+                'request' => [
+                    'headers' => (object) [],
+                    'auth' => ['type' => $public ? 'noauth' : 'bearer'],
+                ],
+                'response' => ['status' => 0, 'body' => null],
+            ], JSON_THROW_ON_ERROR));
+            $runner->run();
+
+            $this->assertTrue($runner->isSuccessful(), $item['name'].': '.$runner->getErrorOutput());
+            $result = json_decode($runner->getOutput(), true, flags: JSON_THROW_ON_ERROR);
+            $headers = array_change_key_case($result['request']['headers'], CASE_LOWER);
+            $this->assertSame('application/json', $headers['accept'] ?? null);
+            if ($public) {
+                $this->assertArrayNotHasKey('x-tenant-id', $headers, $item['name'].' leaked tenant context through prerequest.');
+            } else {
+                $this->assertSame('321', $headers['x-tenant-id'] ?? null, $item['name'].' lost tenant context.');
+            }
+        }
+    }
+
     public function test_knowledge_postman_workflow_executes_the_real_api_without_outbound_traffic(): void
     {
         Http::preventStrayRequests();

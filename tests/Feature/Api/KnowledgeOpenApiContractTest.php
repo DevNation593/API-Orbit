@@ -39,6 +39,7 @@ class KnowledgeOpenApiContractTest extends TestCase
             if (str_starts_with($path, '/public/')) {
                 $this->assertStringNotContainsString('bearerAuth', $block);
                 $this->assertStringNotContainsString('X-Tenant-ID', $block);
+                $this->assertStringContainsString('security: []', $block, "{$path} must explicitly opt out of inherited Bearer auth.");
             } else {
                 $this->assertStringContainsString('bearerAuth', $block);
                 $this->assertStringContainsString('TenantHeader', $block);
@@ -52,6 +53,30 @@ class KnowledgeOpenApiContractTest extends TestCase
         $this->assertStringContainsString('PUBLISHED', $yaml);
         $this->assertStringContainsString('CUSTOMER', $yaml);
         $this->assertStringNotContainsString("\n        slug:", $yaml);
+    }
+
+    public function test_knowledge_write_schemas_allow_only_client_editorial_fields_and_resolve_local_references(): void
+    {
+        $yaml = file_get_contents(base_path('docs/openapi.yaml'));
+        $schemas = $this->knowledgeSchemas($yaml);
+        $update = $this->schemaBlock($schemas, 'KnowledgeArticleUpdate');
+
+        $this->assertStringNotContainsString('allOf:', $update);
+        $this->assertStringContainsString('required: [expected_version]', $update);
+        foreach ([
+            'expected_version', 'title', 'summary', 'body_html', 'visibility',
+            'category_id', 'tag_ids', 'seo_title', 'seo_description', 'change_summary',
+        ] as $field) {
+            $this->assertStringContainsString($field.':', $update);
+        }
+        foreach (['slug', 'public_id', 'status', 'current_version_id', 'published_version_id', 'created_by', 'updated_by', 'author_id'] as $forbidden) {
+            $this->assertStringNotContainsString($forbidden.':', $this->schemaBlock($schemas, 'KnowledgeArticleCreate'));
+            $this->assertStringNotContainsString($forbidden.':', $update);
+        }
+        preg_match_all("/\$ref: '#\/components\/schemas\/([A-Za-z0-9]+)'/", $schemas, $references);
+        foreach (array_unique($references[1]) as $reference) {
+            $this->assertNotSame('', $this->schemaBlock($schemas, $reference), "Unresolved Knowledge schema {$reference}.");
+        }
     }
 
     private function pathsBlock(string $yaml): string
@@ -72,6 +97,27 @@ class KnowledgeOpenApiContractTest extends TestCase
         }
         $rest = substr($paths, $start + strlen($needle));
         preg_match('/^  \/[^\n]+:\n/m', $rest, $next, PREG_OFFSET_CAPTURE);
+
+        return $next === [] ? $rest : substr($rest, 0, $next[0][1]);
+    }
+
+    private function knowledgeSchemas(string $yaml): string
+    {
+        $start = strpos($yaml, '    # BEGIN API-7.2 KNOWLEDGE SCHEMAS');
+        $end = strpos($yaml, '    # END API-7.2 KNOWLEDGE SCHEMAS');
+
+        return substr($yaml, $start, $end - $start);
+    }
+
+    private function schemaBlock(string $schemas, string $name): string
+    {
+        $needle = "    {$name}:\n";
+        $start = strpos($schemas, $needle);
+        if ($start === false) {
+            return '';
+        }
+        $rest = substr($schemas, $start + strlen($needle));
+        preg_match('/^    [A-Za-z][A-Za-z0-9]+:\n/m', $rest, $next, PREG_OFFSET_CAPTURE);
 
         return $next === [] ? $rest : substr($rest, 0, $next[0][1]);
     }
