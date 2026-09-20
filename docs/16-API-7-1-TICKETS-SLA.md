@@ -2,7 +2,7 @@
 
 Este bloque implementa la operación interna de soporte de API-7: agentes, categorías, colas, tickets, comentarios, calendarios hábiles, políticas SLA y escalaciones recuperables. Mantiene IDs numéricos, aislamiento por `tenant_id`, Bearer Sanctum y respuestas `{data, meta}`.
 
-API-7.1 no incorpora todavía base de conocimiento, portal/autenticación de clientes, Customer Success, encuestas, watchers, fusión de tickets, adjuntos propios ni sincronización automática con email o WhatsApp.
+API-7.1 no incorpora base de conocimiento; ese bloque se entrega separadamente como API-7.2. Portal/autenticación de clientes, Customer Success, encuestas, watchers, fusión de tickets, adjuntos propios y sincronización automática con email o WhatsApp siguen fuera de ambos bloques.
 
 ## Puesta en marcha
 
