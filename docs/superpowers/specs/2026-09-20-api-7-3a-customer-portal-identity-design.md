@@ -163,7 +163,7 @@ La entidad y su localizador se crean, actualizan o eliminan en la misma transacc
 - `portal_password_reset_tokens`: `token_hash` único e índice por tenant/usuario/uso/caducidad;
 - localizadores: clave opaca única, entidad única e índice por tenant.
 
-La migración agrega a `contacts` el índice único de soporte `(id, tenant_id)` y usa FKs compuestas para que `portal_users` e invitaciones no puedan apuntar a un contacto de otro tenant. El mismo patrón relaciona resets, auditoría y localizadores con sus entidades. Las validaciones de servicio y RLS se conservan como capas adicionales, no como sustitutos de la integridad de base de datos.
+La migración agrega a `contacts` el índice único de soporte `(id, tenant_id)` y usa FKs compuestas para que `portal_users` e invitaciones no puedan apuntar a un contacto de otro tenant. El mismo patrón relaciona resets y localizadores con sus entidades. `audit_logs.portal_user_id` usa una FK nullable simple con `SET NULL` para preservar el log si desaparece el actor; `AuditService` exige que actor y log compartan tenant, evitando una FK compuesta cuyo `SET NULL` intentaría anular también `tenant_id`. Las validaciones de servicio y RLS se conservan como capas adicionales, no como sustitutos de la integridad de base de datos.
 
 ### 4.6 Auditoría
 
