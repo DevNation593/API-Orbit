@@ -41,7 +41,10 @@ it('creates a tenant and administrator through registration', function (): void 
     ]);
 
     $response->assertCreated()->assertJsonPath('data.tenant.name', 'Education CRM');
-    $this->assertDatabaseHas('tenant_user', ['user_id' => 1, 'status' => 'active']);
+    $this->assertDatabaseHas('tenant_user', [
+        'user_id' => $response->json('data.user.id'),
+        'status' => 'active',
+    ]);
     $this->assertDatabaseHas('permissions', ['key' => 'contacts.create']);
 });
 

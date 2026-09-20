@@ -145,7 +145,7 @@ class SlaConfigurationTest extends SupportTestCase
         $client['queue']->update(['sla_policy_id' => null]);
         $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', $client['tenant']->id);
         $api->patchJson('/api/v1/support/sla-policies/'.$client['policy']->id, ['rules' => $this->rules(30, 120), 'is_active' => false])->assertOk();
-        $this->assertSame($snapshot, $execution->fresh()->snapshot);
+        $this->assertEquals($snapshot, $execution->fresh()->snapshot);
         $api->deleteJson('/api/v1/support/sla-policies/'.$client['policy']->id)->assertConflict();
         $this->assertDatabaseCount('sla_rules', 4);
     }

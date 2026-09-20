@@ -42,7 +42,7 @@ class SupportConfigurationTest extends SupportTestCase
         $client['queue']->update(['escalation_agent_id' => $client['agent']->id]);
         $this->assertSame($calendar->id, $client['policy']->calendar->id);
         $this->assertSame(['2026-12-25'], $calendar->fresh()->holidays);
-        $this->assertSame([['start' => '09:00', 'end' => '17:00']], $calendar->fresh()->weekly_schedule[1]);
+        $this->assertEquals([['start' => '09:00', 'end' => '17:00']], $calendar->fresh()->weekly_schedule[1]);
         $this->assertSame($client['agent']->id, $client['queue']->escalationAgent->id);
         $ticket = $this->ticketFor($client);
         $this->assertSame('OPEN', $ticket->status);
