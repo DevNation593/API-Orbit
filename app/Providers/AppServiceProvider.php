@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\SupportEscalationNotifier;
 use App\Events\ContactCreated;
 use App\Events\DealStageChanged;
 use App\Events\LeadCreated;
@@ -23,7 +24,13 @@ use App\Models\KnowledgeTag;
 use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Pipeline;
+use App\Models\SlaBusinessCalendar;
+use App\Models\SlaPolicy;
+use App\Models\SupportAgent;
+use App\Models\SupportQueue;
 use App\Models\Task;
+use App\Models\Ticket;
+use App\Models\TicketCategory;
 use App\Models\User;
 use App\Policies\ActivityPolicy;
 use App\Policies\AutomationPolicy;
@@ -36,7 +43,10 @@ use App\Policies\KnowledgePolicy;
 use App\Policies\LeadPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\PipelinePolicy;
+use App\Policies\SupportPolicy;
 use App\Policies\TaskPolicy;
+use App\Policies\TicketPolicy;
+use App\Services\ExistingSupportEscalationNotifier;
 use App\Services\IntegrationManager;
 use App\Support\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -51,6 +61,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TenantContext::class);
+        $this->app->bind(SupportEscalationNotifier::class, ExistingSupportEscalationNotifier::class);
         $this->app->singleton(IntegrationManager::class, function (): IntegrationManager {
             $manager = new IntegrationManager;
             foreach (config('integrations.providers', []) as $providerClass) {
@@ -78,6 +89,11 @@ class AppServiceProvider extends ServiceProvider
             Gate::policy($model, KnowledgePolicy::class);
         }
         Gate::policy(KnowledgeArticle::class, KnowledgeArticlePolicy::class);
+
+        foreach ([SupportAgent::class, TicketCategory::class, SupportQueue::class, SlaBusinessCalendar::class, SlaPolicy::class] as $model) {
+            Gate::policy($model, SupportPolicy::class);
+        }
+        Gate::policy(Ticket::class, TicketPolicy::class);
 
         Relation::enforceMorphMap([
             'user' => User::class,

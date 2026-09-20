@@ -220,6 +220,10 @@ return [
             'connection' => 'redis', 'queue' => ['integrations'], 'balance' => 'auto',
             'maxProcesses' => 4, 'tries' => 3, 'timeout' => 120,
         ],
+        'supervisor-support' => [
+            'connection' => 'redis', 'queue' => ['support'], 'balance' => 'simple',
+            'maxProcesses' => 2, 'tries' => 3, 'timeout' => 120,
+        ],
         'supervisor-imports' => [
             'connection' => 'redis', 'queue' => ['imports'], 'balance' => 'simple',
             'maxProcesses' => 2, 'tries' => 3, 'timeout' => 900,
@@ -239,6 +243,7 @@ return [
             ],
             'supervisor-automations' => ['maxProcesses' => 10],
             'supervisor-integrations' => ['maxProcesses' => 8],
+            'supervisor-support' => ['maxProcesses' => 4],
             'supervisor-imports' => ['maxProcesses' => 4],
             'supervisor-exports' => ['maxProcesses' => 4],
         ],
