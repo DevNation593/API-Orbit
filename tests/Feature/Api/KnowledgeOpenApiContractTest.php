@@ -79,6 +79,39 @@ class KnowledgeOpenApiContractTest extends TestCase
         }
     }
 
+    public function test_knowledge_article_list_filters_and_public_article_schemas_match_the_api_resources(): void
+    {
+        $yaml = file_get_contents(base_path('docs/openapi.yaml'));
+        $schemas = $this->knowledgeSchemas($yaml);
+
+        foreach ([
+            'q', 'status', 'visibility', 'category_id', 'tag_id', 'has_unpublished_changes',
+            'created_from', 'created_to', 'sort', 'direction', 'per_page', 'page',
+        ] as $parameter) {
+            $this->assertStringContainsString('name: '.$parameter, $this->pathBlock($yaml, '/knowledge/articles'));
+        }
+        foreach (['q', 'category_id', 'tag_id', 'sort', 'direction', 'per_page', 'page'] as $parameter) {
+            $this->assertStringContainsString('name: '.$parameter, $this->pathBlock($yaml, '/public/knowledge/{basePublicId}/articles'));
+        }
+
+        $summary = $this->schemaBlock($schemas, 'PublicKnowledgeArticleSummary');
+        foreach (['public_id', 'title', 'summary', 'category', 'tags', 'seo_title', 'seo_description', 'version', 'published_at'] as $field) {
+            $this->assertStringContainsString($field.':', $summary);
+        }
+        $this->assertStringNotContainsString('visibility:', $summary);
+        $this->assertStringNotContainsString('body_html:', $summary);
+        $this->assertStringContainsString("items: {\$ref: '#/components/schemas/PublicKnowledgeTag'}", $summary);
+
+        $category = $this->schemaBlock($schemas, 'PublicKnowledgeCategory');
+        $tag = $this->schemaBlock($schemas, 'PublicKnowledgeTag');
+        $this->assertStringContainsString('position:', $category);
+        $this->assertStringNotContainsString('position:', $tag);
+        foreach (['name:', 'description:'] as $field) {
+            $this->assertStringContainsString($field, $tag);
+        }
+        $this->assertStringContainsString('body_html:', $this->schemaBlock($schemas, 'PublicKnowledgeArticle'));
+    }
+
     private function pathsBlock(string $yaml): string
     {
         $start = strpos($yaml, "paths:\n");

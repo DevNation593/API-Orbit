@@ -22,12 +22,12 @@ class KnowledgePolicy
 
     public function create(User $user): bool
     {
-        return $this->allowed($user, 'knowledge.manage');
+        return $this->viewAny($user) && $this->allowed($user, 'knowledge.manage');
     }
 
     public function update(User $user, Model $model): bool
     {
-        return $this->allowed($user, 'knowledge.manage', $model);
+        return $this->view($user, $model) && $this->allowed($user, 'knowledge.manage', $model);
     }
 
     public function delete(User $user, Model $model): bool

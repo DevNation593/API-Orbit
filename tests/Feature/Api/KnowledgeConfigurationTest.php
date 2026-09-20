@@ -96,6 +96,40 @@ class KnowledgeConfigurationTest extends KnowledgeTestCase
         $api->deleteJson('/api/v1/knowledge/tags/'.$viewer['tag']->id)->assertForbidden();
     }
 
+    public function test_manage_without_view_cannot_mutate_settings_categories_or_tags(): void
+    {
+        $manager = $this->knowledgeFixture(['knowledge.manage']);
+        $api = $this->withToken($manager['token'])->withHeader('X-Tenant-ID', $manager['tenant']->id);
+
+        $api->putJson('/api/v1/knowledge/settings', ['title' => 'No debe cambiar'])->assertForbidden();
+        $api->postJson('/api/v1/knowledge/categories', ['name' => 'No debe crearse'])->assertForbidden();
+        $api->patchJson('/api/v1/knowledge/categories/'.$manager['category']->id, ['name' => 'No debe editarse'])->assertForbidden();
+        $api->deleteJson('/api/v1/knowledge/categories/'.$manager['category']->id)->assertForbidden();
+        $api->postJson('/api/v1/knowledge/tags', ['name' => 'No debe crearse'])->assertForbidden();
+        $api->patchJson('/api/v1/knowledge/tags/'.$manager['tag']->id, ['name' => 'No debe editarse'])->assertForbidden();
+        $api->deleteJson('/api/v1/knowledge/tags/'.$manager['tag']->id)->assertForbidden();
+
+        $this->assertDatabaseHas('knowledge_bases', ['id' => $manager['base']->id, 'title' => 'Centro de ayuda']);
+        $this->assertDatabaseHas('knowledge_categories', ['id' => $manager['category']->id, 'name' => 'Facturación']);
+        $this->assertDatabaseHas('knowledge_tags', ['id' => $manager['tag']->id, 'name' => 'Primeros pasos']);
+        $this->assertDatabaseMissing('knowledge_categories', ['tenant_id' => $manager['tenant']->id, 'name' => 'No debe crearse']);
+        $this->assertDatabaseMissing('knowledge_tags', ['tenant_id' => $manager['tenant']->id, 'name' => 'No debe crearse']);
+    }
+
+    public function test_view_and_manage_can_mutate_settings_categories_and_tags(): void
+    {
+        $manager = $this->knowledgeFixture(['knowledge.view', 'knowledge.manage']);
+        $api = $this->withToken($manager['token'])->withHeader('X-Tenant-ID', $manager['tenant']->id);
+
+        $api->putJson('/api/v1/knowledge/settings', ['title' => 'Centro actualizado'])->assertOk();
+        $categoryId = $api->postJson('/api/v1/knowledge/categories', ['name' => 'Operaciones'])->assertCreated()->json('data.id');
+        $tagId = $api->postJson('/api/v1/knowledge/tags', ['name' => 'Producto'])->assertCreated()->json('data.id');
+        $api->patchJson('/api/v1/knowledge/categories/'.$categoryId, ['name' => 'Operaciones globales'])->assertOk();
+        $api->patchJson('/api/v1/knowledge/tags/'.$tagId, ['name' => 'Producto nuevo'])->assertOk();
+        $api->deleteJson('/api/v1/knowledge/categories/'.$categoryId)->assertOk();
+        $api->deleteJson('/api/v1/knowledge/tags/'.$tagId)->assertOk();
+    }
+
     public function test_equivalent_normalized_catalog_names_conflict_within_the_tenant(): void
     {
         $client = $this->createTenantUser();
