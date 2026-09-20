@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\SupportEscalationNotifier;
 use App\Events\ContactCreated;
 use App\Events\DealStageChanged;
 use App\Events\LeadCreated;
@@ -15,10 +16,21 @@ use App\Models\EntityDefinition;
 use App\Models\EntityRecord;
 use App\Models\FieldDefinition;
 use App\Models\FileRecord;
+use App\Models\KnowledgeArticle;
+use App\Models\KnowledgeArticleVersion;
+use App\Models\KnowledgeBase;
+use App\Models\KnowledgeCategory;
+use App\Models\KnowledgeTag;
 use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Pipeline;
+use App\Models\SlaBusinessCalendar;
+use App\Models\SlaPolicy;
+use App\Models\SupportAgent;
+use App\Models\SupportQueue;
 use App\Models\Task;
+use App\Models\Ticket;
+use App\Models\TicketCategory;
 use App\Models\User;
 use App\Policies\ActivityPolicy;
 use App\Policies\AutomationPolicy;
@@ -26,10 +38,15 @@ use App\Policies\ContactPolicy;
 use App\Policies\DealPolicy;
 use App\Policies\EntityDefinitionPolicy;
 use App\Policies\FieldDefinitionPolicy;
+use App\Policies\KnowledgeArticlePolicy;
+use App\Policies\KnowledgePolicy;
 use App\Policies\LeadPolicy;
 use App\Policies\OrganizationPolicy;
 use App\Policies\PipelinePolicy;
+use App\Policies\SupportPolicy;
 use App\Policies\TaskPolicy;
+use App\Policies\TicketPolicy;
+use App\Services\ExistingSupportEscalationNotifier;
 use App\Services\IntegrationManager;
 use App\Support\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -44,6 +61,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(TenantContext::class);
+        $this->app->bind(SupportEscalationNotifier::class, ExistingSupportEscalationNotifier::class);
         $this->app->singleton(IntegrationManager::class, function (): IntegrationManager {
             $manager = new IntegrationManager;
             foreach (config('integrations.providers', []) as $providerClass) {
@@ -67,6 +85,16 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Automation::class, AutomationPolicy::class);
         Gate::policy(Activity::class, ActivityPolicy::class);
 
+        foreach ([KnowledgeBase::class, KnowledgeCategory::class, KnowledgeTag::class, KnowledgeArticleVersion::class] as $model) {
+            Gate::policy($model, KnowledgePolicy::class);
+        }
+        Gate::policy(KnowledgeArticle::class, KnowledgeArticlePolicy::class);
+
+        foreach ([SupportAgent::class, TicketCategory::class, SupportQueue::class, SlaBusinessCalendar::class, SlaPolicy::class] as $model) {
+            Gate::policy($model, SupportPolicy::class);
+        }
+        Gate::policy(Ticket::class, TicketPolicy::class);
+
         Relation::enforceMorphMap([
             'user' => User::class,
             'contact' => Contact::class,
@@ -82,6 +110,10 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('api', fn ($request) => Limit::perMinute(120)->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('webhooks', fn ($request) => Limit::perMinute(60)->by((string) $request->ip()));
         RateLimiter::for('exports', fn ($request) => Limit::perMinute(10)->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('public-knowledge', fn ($request) => [
+            Limit::perMinute(60)->by((string) $request->route('basePublicId').'|'.$request->ip()),
+            Limit::perDay(1000)->by((string) $request->route('basePublicId').'|'.$request->ip()),
+        ]);
 
         Event::listen(ContactCreated::class, DispatchAutomation::class);
         Event::listen(LeadCreated::class, DispatchAutomation::class);

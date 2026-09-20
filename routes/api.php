@@ -34,6 +34,8 @@ foreach ([
 }
 
 Route::prefix('v1')->group(function (): void {
+    require __DIR__.'/knowledge.php';
+    require __DIR__.'/support.php';
     Route::prefix('auth')->middleware('throttle:auth')->group(function (): void {
         Route::post('register', [AuthController::class, 'register']);
         Route::post('login', [AuthController::class, 'login']);

@@ -23,6 +23,13 @@ final class PermissionCatalog
         'imports.create', 'exports.create',
         'webhooks.view', 'webhooks.manage',
         'integrations.view', 'integrations.manage',
+        'notifications.view', 'notifications.manage',
+        'inboxes.view', 'inboxes.manage',
+        'conversations.view', 'conversations.reply', 'conversations.assign',
+        'support.view', 'support.manage', 'tickets.view', 'tickets.create',
+        'tickets.update', 'tickets.assign', 'tickets.reply',
+        'tickets.comment_internal', 'tickets.change_status', 'sla.view', 'sla.manage',
+        'knowledge.view', 'knowledge.manage', 'knowledge.publish',
         'reports.view', 'audit.view',
         'users.manage', 'roles.manage', 'settings.manage',
     ];
