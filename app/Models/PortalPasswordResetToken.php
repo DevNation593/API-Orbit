@@ -6,27 +6,25 @@ use App\Models\Concerns\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class AuditLog extends Model
+class PortalPasswordResetToken extends Model
 {
     use TenantScoped;
 
-    public $timestamps = false;
+    protected $fillable = ['portal_user_id', 'token_hash', 'expires_at', 'used_at'];
 
-    protected $fillable = ['tenant_id', 'user_id', 'portal_user_id', 'action', 'entity_type', 'entity_id', 'old_values', 'new_values', 'ip', 'user_agent', 'request_id', 'created_at'];
+    protected $hidden = ['token_hash'];
 
     protected function casts(): array
     {
-        return ['old_values' => 'array', 'new_values' => 'array', 'created_at' => 'datetime'];
+        return [
+            'expires_at' => 'immutable_datetime',
+            'used_at' => 'immutable_datetime',
+        ];
     }
 
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
-    }
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
     }
 
     public function portalUser(): BelongsTo

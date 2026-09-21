@@ -24,6 +24,7 @@ use App\Models\KnowledgeTag;
 use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Pipeline;
+use App\Models\PortalUser;
 use App\Models\SlaBusinessCalendar;
 use App\Models\SlaPolicy;
 use App\Models\SupportAgent;
@@ -104,6 +105,7 @@ class AppServiceProvider extends ServiceProvider
             'task' => Task::class,
             'file' => FileRecord::class,
             'entity_record' => EntityRecord::class,
+            'portal_user' => PortalUser::class,
         ]);
 
         RateLimiter::for('auth', fn ($request) => Limit::perMinute(10)->by((string) $request->ip()));

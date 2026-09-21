@@ -3,8 +3,11 @@
 namespace App\Support;
 
 use App\Models\AuditLog;
+use App\Models\PortalUser;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use LogicException;
 
 final class AuditService
 {
@@ -16,10 +19,16 @@ final class AuditService
         ?array $newValues = null,
         ?Request $request = null,
         ?int $tenantId = null,
+        User|PortalUser|null $actor = null,
     ): AuditLog {
         $model = $entity instanceof Model ? $entity : null;
         $request ??= request();
         $tenant = $model?->getAttribute('tenant_id') ?? $tenantId ?? app(TenantContext::class)->requireId();
+        $principal = $actor ?? $request?->user();
+        if ($principal instanceof PortalUser && (int) $principal->tenant_id !== (int) $tenant) {
+            throw new LogicException('The portal actor does not belong to the audit tenant.');
+        }
+
         $context = app(TenantContext::class);
         $previousTenant = $context->id();
         if ($previousTenant !== (int) $tenant) {
@@ -29,7 +38,8 @@ final class AuditService
         try {
             return AuditLog::create([
                 'tenant_id' => $tenant,
-                'user_id' => auth()->id(),
+                'user_id' => $principal instanceof User ? $principal->id : null,
+                'portal_user_id' => $principal instanceof PortalUser ? $principal->id : null,
                 'action' => $action,
                 'entity_type' => $model?->getTable() ?? (string) $entity,
                 'entity_id' => (string) ($model?->getKey() ?? $entityId ?? 'unknown'),
@@ -37,7 +47,8 @@ final class AuditService
                 'new_values' => $this->redact($newValues),
                 'ip' => $request?->ip(),
                 'user_agent' => $request?->userAgent(),
-                'request_id' => $request?->header('X-Request-ID') ?? $request?->attributes->get('request_id'),
+                'request_id' => $request?->header('X-Request-ID')
+                    ?? $request?->attributes->get('request_id'),
             ]);
         } finally {
             $previousTenant === null ? $context->clear() : $context->set($previousTenant);
@@ -50,9 +61,15 @@ final class AuditService
             return null;
         }
 
-        foreach (['password', 'token', 'secret', 'credentials', 'private_key', 'api_key', 'access_token'] as $key) {
-            if (array_key_exists($key, $values)) {
+        $sensitive = [
+            'password', 'password_confirmation', 'token', 'token_hash',
+            'access_token', 'secret', 'credentials', 'private_key', 'api_key',
+        ];
+        foreach ($values as $key => $value) {
+            if (in_array(mb_strtolower((string) $key), $sensitive, true)) {
                 $values[$key] = '[REDACTED]';
+            } elseif (is_array($value)) {
+                $values[$key] = $this->redact($value);
             }
         }
 

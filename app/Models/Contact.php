@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -36,6 +38,16 @@ class Contact extends Model
     public function organizations(): BelongsToMany
     {
         return $this->belongsToMany(Organization::class)->withPivot('tenant_id')->withTimestamps();
+    }
+
+    public function portalUser(): HasOne
+    {
+        return $this->hasOne(PortalUser::class);
+    }
+
+    public function portalInvitations(): HasMany
+    {
+        return $this->hasMany(PortalInvitation::class);
     }
 
     public function activities(): MorphMany

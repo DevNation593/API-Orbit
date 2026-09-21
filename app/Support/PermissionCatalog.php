@@ -31,7 +31,7 @@ final class PermissionCatalog
         'tickets.comment_internal', 'tickets.change_status', 'sla.view', 'sla.manage',
         'knowledge.view', 'knowledge.manage', 'knowledge.publish',
         'reports.view', 'audit.view',
-        'users.manage', 'roles.manage', 'settings.manage',
+        'users.manage', 'roles.manage', 'settings.manage', 'portal.manage',
     ];
 
     /** @return array<int, int> */
