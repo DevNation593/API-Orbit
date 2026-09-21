@@ -232,6 +232,50 @@ class PortalConfigurationTest extends PortalTestCase
         $this->assertDatabaseCount('customer_portal_locators', 0);
     }
 
+    public function test_settings_creation_rejects_unknown_top_level_fields_without_mutation(): void
+    {
+        $client = $this->createTenantUser(['portal.manage']);
+
+        $this->internalApi($client)->putJson('/api/v1/customer-portal/settings', [
+            'title' => 'Portal no permitido',
+            'is_active' => true,
+            'settings' => ['welcome_message' => 'No debe persistir'],
+            'unexpected' => 'forbidden',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+
+        $this->assertDatabaseCount('customer_portals', 0);
+        $this->assertDatabaseCount('customer_portal_locators', 0);
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $client['tenant']->id,
+            'action' => 'portal.settings.created',
+        ]);
+    }
+
+    public function test_settings_update_rejects_unknown_top_level_fields_without_mutation(): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+
+        $this->internalApi($fixture)->putJson('/api/v1/customer-portal/settings', [
+            'title' => 'Portal alterado',
+            'is_active' => false,
+            'settings' => ['welcome_message' => 'No debe persistir'],
+            'created_at' => now()->toIso8601String(),
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['created_at']);
+
+        $portal = $fixture['portal']->fresh();
+        $this->assertSame('Portal de clientes', $portal->title);
+        $this->assertTrue($portal->is_active);
+        $this->assertSame(['welcome_message' => 'Bienvenido'], $portal->settings);
+        $this->assertDatabaseCount('customer_portals', 1);
+        $this->assertDatabaseCount('customer_portal_locators', 1);
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $fixture['tenant']->id,
+            'action' => 'portal.settings.disabled',
+        ]);
+    }
+
     public function test_internal_routes_require_portal_permission_and_active_membership(): void
     {
         $unprivileged = $this->portalFixture(['contacts.view']);
@@ -425,6 +469,30 @@ class PortalConfigurationTest extends PortalTestCase
         $this->assertSame(PortalUser::STATUS_ACTIVE, $portalUser->status);
         $this->assertSame('immutable@example.test', $portalUser->email);
         $this->assertSame($fixture['contact']->id, $portalUser->contact_id);
+    }
+
+    public function test_status_update_rejects_unknown_top_level_fields_without_mutation(): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $portalUser = $this->createPortalUser($fixture, [
+            'contact_id' => $fixture['contact']->id,
+            'email' => 'strict-status@example.test',
+        ]);
+        $portalUser->createToken('must remain active');
+
+        $this->internalApi($fixture)
+            ->patchJson('/api/v1/customer-portal/users/'.$portalUser->id, [
+                'status' => PortalUser::STATUS_SUSPENDED,
+                'unexpected' => 'forbidden',
+            ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+
+        $this->assertSame(PortalUser::STATUS_ACTIVE, $portalUser->fresh()->status);
+        $this->assertSame(1, $portalUser->tokens()->count());
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $fixture['tenant']->id,
+            'action' => 'portal.user.suspended',
+        ]);
     }
 
     public function test_suspension_revokes_tokens_and_reactivation_does_not_issue_one(): void

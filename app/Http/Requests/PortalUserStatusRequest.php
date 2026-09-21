@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\RejectsUnknownRootKeys;
 use App\Models\PortalUser;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 
 class PortalUserStatusRequest extends BaseApiRequest
 {
+    use RejectsUnknownRootKeys;
+
     public function authorize(): bool
     {
         return Gate::allows('viewAny', PortalUser::class);
@@ -15,7 +18,7 @@ class PortalUserStatusRequest extends BaseApiRequest
 
     public function rules(): array
     {
-        return [
+        return $this->withStrictRootKeys([
             'status' => ['required', Rule::in([
                 PortalUser::STATUS_ACTIVE,
                 PortalUser::STATUS_SUSPENDED,
@@ -24,6 +27,6 @@ class PortalUserStatusRequest extends BaseApiRequest
             'contact_id' => ['missing'],
             'email' => ['missing'],
             'password' => ['missing'],
-        ];
+        ], ['status']);
     }
 }
