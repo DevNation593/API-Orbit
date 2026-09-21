@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 use Tests\Support\PortalTestCase;
 
@@ -252,6 +253,27 @@ class PortalConfigurationTest extends PortalTestCase
         ]);
     }
 
+    #[DataProvider('emptyUnknownRootValues')]
+    public function test_settings_creation_rejects_empty_unknown_root_values_without_mutation(mixed $value): void
+    {
+        $client = $this->createTenantUser(['portal.manage']);
+
+        $this->internalApi($client)->putJson('/api/v1/customer-portal/settings', [
+            'title' => 'Portal no permitido',
+            'is_active' => true,
+            'settings' => ['welcome_message' => 'No debe persistir'],
+            'unexpected' => $value,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+
+        $this->assertDatabaseCount('customer_portals', 0);
+        $this->assertDatabaseCount('customer_portal_locators', 0);
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $client['tenant']->id,
+            'action' => 'portal.settings.created',
+        ]);
+    }
+
     public function test_settings_update_rejects_unknown_top_level_fields_without_mutation(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
@@ -270,6 +292,35 @@ class PortalConfigurationTest extends PortalTestCase
         $this->assertSame(['welcome_message' => 'Bienvenido'], $portal->settings);
         $this->assertDatabaseCount('customer_portals', 1);
         $this->assertDatabaseCount('customer_portal_locators', 1);
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $fixture['tenant']->id,
+            'action' => 'portal.settings.disabled',
+        ]);
+    }
+
+    #[DataProvider('emptyUnknownRootValues')]
+    public function test_settings_update_rejects_empty_unknown_root_values_without_mutation(mixed $value): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $portalUser = $this->createPortalUser($fixture, [
+            'contact_id' => $fixture['contact']->id,
+            'email' => 'strict-empty-settings@example.test',
+        ]);
+        $portalUser->createToken('must remain active');
+
+        $this->internalApi($fixture)->putJson('/api/v1/customer-portal/settings', [
+            'title' => 'Portal alterado',
+            'is_active' => false,
+            'settings' => ['welcome_message' => 'No debe persistir'],
+            'unexpected' => $value,
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+
+        $portal = $fixture['portal']->fresh();
+        $this->assertSame('Portal de clientes', $portal->title);
+        $this->assertTrue($portal->is_active);
+        $this->assertSame(['welcome_message' => 'Bienvenido'], $portal->settings);
+        $this->assertSame(1, $portalUser->tokens()->count());
         $this->assertDatabaseMissing('audit_logs', [
             'tenant_id' => $fixture['tenant']->id,
             'action' => 'portal.settings.disabled',
@@ -495,6 +546,31 @@ class PortalConfigurationTest extends PortalTestCase
         ]);
     }
 
+    #[DataProvider('emptyUnknownRootValues')]
+    public function test_status_update_rejects_empty_unknown_root_values_without_mutation(mixed $value): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $portalUser = $this->createPortalUser($fixture, [
+            'contact_id' => $fixture['contact']->id,
+            'email' => 'strict-empty-status@example.test',
+        ]);
+        $portalUser->createToken('must remain active');
+
+        $this->internalApi($fixture)
+            ->patchJson('/api/v1/customer-portal/users/'.$portalUser->id, [
+                'status' => PortalUser::STATUS_SUSPENDED,
+                'unexpected' => $value,
+            ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+
+        $this->assertSame(PortalUser::STATUS_ACTIVE, $portalUser->fresh()->status);
+        $this->assertSame(1, $portalUser->tokens()->count());
+        $this->assertDatabaseMissing('audit_logs', [
+            'tenant_id' => $fixture['tenant']->id,
+            'action' => 'portal.user.suspended',
+        ]);
+    }
+
     public function test_suspension_revokes_tokens_and_reactivation_does_not_issue_one(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
@@ -666,6 +742,18 @@ class PortalConfigurationTest extends PortalTestCase
         );
         $response->assertForbidden()
             ->assertJsonPath('message', 'This principal cannot access the internal API.');
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function emptyUnknownRootValues(): array
+    {
+        return [
+            'null' => [null],
+            'empty string' => [''],
+            'empty array' => [[]],
+        ];
     }
 
     /**

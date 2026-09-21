@@ -13,7 +13,7 @@ trait RejectsUnknownRootKeys
     {
         foreach (array_diff(array_keys($this->all()), $allowedKeys) as $key) {
             if (! array_key_exists($key, $rules)) {
-                $rules[$key] = ['prohibited'];
+                $rules[$key] = ['missing'];
             }
         }
 
