@@ -454,7 +454,7 @@ class PortalPersistenceTest extends TestCase
         ];
 
         $this->assertSame('sqlite', DB::getDriverName());
-        $this->assertSame(':memory:', config('database.connections.sqlite.database'));
+        $this->assertSame(':memory:', DB::connection()->getDatabaseName());
         $this->assertSame(
             0,
             Artisan::call('migrate', ['--force' => true]),
