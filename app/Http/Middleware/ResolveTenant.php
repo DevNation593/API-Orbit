@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\TenantUser;
+use App\Models\User;
 use App\Support\ApiResponse;
 use App\Support\TenantContext;
 use Closure;
@@ -11,14 +12,20 @@ use Symfony\Component\HttpFoundation\Response;
 
 class ResolveTenant
 {
-    public function handle(Request $request, Closure $next): Response
+    public function handle(Request $request, Closure $next, string $selection = 'optional'): Response
     {
         $user = $request->user();
         if ($user === null) {
             return ApiResponse::error('Unauthenticated.', [], 401);
         }
+        if (! $user instanceof User) {
+            return ApiResponse::error('This principal cannot access the internal API.', [], 403);
+        }
 
         $requestedTenant = $request->header((string) config('tenancy.header', 'X-Tenant-ID'));
+        if ($requestedTenant === null && $selection === 'required') {
+            return ApiResponse::error('The tenant header is required.', [], 403);
+        }
         $membershipQuery = TenantUser::query()
             ->with('tenant')
             ->where('user_id', $user->getKey())

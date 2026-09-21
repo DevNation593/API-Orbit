@@ -11,6 +11,7 @@ use App\Listeners\DispatchAutomation;
 use App\Models\Activity;
 use App\Models\Automation;
 use App\Models\Contact;
+use App\Models\CustomerPortal;
 use App\Models\Deal;
 use App\Models\EntityDefinition;
 use App\Models\EntityRecord;
@@ -24,6 +25,7 @@ use App\Models\KnowledgeTag;
 use App\Models\Lead;
 use App\Models\Organization;
 use App\Models\Pipeline;
+use App\Models\PortalInvitation;
 use App\Models\PortalUser;
 use App\Models\SlaBusinessCalendar;
 use App\Models\SlaPolicy;
@@ -36,6 +38,7 @@ use App\Models\User;
 use App\Policies\ActivityPolicy;
 use App\Policies\AutomationPolicy;
 use App\Policies\ContactPolicy;
+use App\Policies\CustomerPortalPolicy;
 use App\Policies\DealPolicy;
 use App\Policies\EntityDefinitionPolicy;
 use App\Policies\FieldDefinitionPolicy;
@@ -85,6 +88,10 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(EntityDefinition::class, EntityDefinitionPolicy::class);
         Gate::policy(Automation::class, AutomationPolicy::class);
         Gate::policy(Activity::class, ActivityPolicy::class);
+
+        foreach ([CustomerPortal::class, PortalUser::class, PortalInvitation::class] as $model) {
+            Gate::policy($model, CustomerPortalPolicy::class);
+        }
 
         foreach ([KnowledgeBase::class, KnowledgeCategory::class, KnowledgeTag::class, KnowledgeArticleVersion::class] as $model) {
             Gate::policy($model, KnowledgePolicy::class);
