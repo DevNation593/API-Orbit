@@ -4,10 +4,12 @@ namespace Tests\Support;
 
 use App\Models\Contact;
 use App\Models\CustomerPortal;
+use App\Models\PortalUser;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Support\PermissionCatalog;
 use App\Support\TenantContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -53,5 +55,36 @@ abstract class PortalTestCase extends TestCase
     {
         return $this->withToken($fixture['token'])
             ->withHeader('X-Tenant-ID', (string) $fixture['tenant']->id);
+    }
+
+    /** @param array{tenant: Tenant, contact: Contact} $fixture */
+    protected function createPortalUser(
+        array $fixture,
+        string $password = 'Portal-Password!2026',
+    ): PortalUser {
+        app(TenantContext::class)->set((int) $fixture['tenant']->id);
+
+        return PortalUser::create([
+            'contact_id' => $fixture['contact']->id,
+            'email' => mb_strtolower(trim((string) $fixture['contact']->email)),
+            'password' => $password,
+            'status' => PortalUser::STATUS_ACTIVE,
+            'email_verified_at' => now(),
+        ]);
+    }
+
+    /**
+     * @param  array{tenant: Tenant, contact: Contact}  $fixture
+     * @return array{user: PortalUser, token: string, expires_at: CarbonImmutable}
+     */
+    protected function portalSession(
+        array $fixture,
+        string $password = 'Portal-Password!2026',
+    ): array {
+        $user = $this->createPortalUser($fixture, $password);
+        $expiresAt = CarbonImmutable::now()->addDays(30);
+        $token = $user->createToken('portal test', ['portal'], $expiresAt)->plainTextToken;
+
+        return ['user' => $user, 'token' => $token, 'expires_at' => $expiresAt];
     }
 }

@@ -12,6 +12,12 @@ class PortalInvitation extends Model
 
     public const STATUS_PENDING = 'PENDING';
 
+    public const STATUS_ACCEPTED = 'ACCEPTED';
+
+    public const STATUS_REVOKED = 'REVOKED';
+
+    public const STATUS_EXPIRED = 'EXPIRED';
+
     protected $fillable = [
         'contact_id', 'invited_by', 'email', 'token_hash', 'status', 'expires_at', 'accepted_at',
     ];

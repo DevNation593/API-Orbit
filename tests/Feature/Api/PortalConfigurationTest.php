@@ -38,7 +38,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_management_routes_require_an_explicit_tenant_header(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'tenant-header@example.test',
         ]);
@@ -60,7 +60,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_management_routes_require_an_internal_bearer(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'internal-bearer@example.test',
         ]);
@@ -302,7 +302,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_settings_update_rejects_empty_unknown_root_values_without_mutation(mixed $value): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'strict-empty-settings@example.test',
         ]);
@@ -330,7 +330,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_internal_routes_require_portal_permission_and_active_membership(): void
     {
         $unprivileged = $this->portalFixture(['contacts.view']);
-        $portalUser = $this->createPortalUser($unprivileged, [
+        $portalUser = $this->createConfiguredPortalUser($unprivileged, [
             'contact_id' => $unprivileged['contact']->id,
             'email' => 'blocked@example.test',
         ]);
@@ -356,7 +356,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_customer_portal_policy_bindings_are_tenant_aware(): void
     {
         $local = $this->portalFixture(['portal.manage']);
-        $localPortalUser = $this->createPortalUser($local, [
+        $localPortalUser = $this->createConfiguredPortalUser($local, [
             'contact_id' => $local['contact']->id,
             'email' => 'local-policy@example.test',
         ]);
@@ -384,14 +384,14 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_settings_and_portal_user_routes_are_tenant_isolated(): void
     {
         $foreign = $this->portalFixture(['portal.manage']);
-        $foreignUser = $this->createPortalUser($foreign, [
+        $foreignUser = $this->createConfiguredPortalUser($foreign, [
             'contact_id' => $foreign['contact']->id,
             'email' => 'foreign@example.test',
         ]);
 
         $this->app['auth']->forgetGuards();
         $local = $this->portalFixture(['portal.manage']);
-        $localUser = $this->createPortalUser($local, [
+        $localUser = $this->createConfiguredPortalUser($local, [
             'contact_id' => $local['contact']->id,
             'email' => 'local@example.test',
         ]);
@@ -423,14 +423,14 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_user_list_filters_paginates_and_treats_wildcards_literally(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $alpha = $this->createPortalUser(
+        $alpha = $this->createConfiguredPortalUser(
             $fixture,
             ['email' => 'alpha@example.test'],
             ['first_name' => 'Needle', 'last_name' => 'Alpha'],
         );
-        $bang = $this->createPortalUser($fixture, ['email' => 'bang!literal@example.test']);
-        $percent = $this->createPortalUser($fixture, ['email' => 'percent%literal@example.test']);
-        $underscore = $this->createPortalUser($fixture, [
+        $bang = $this->createConfiguredPortalUser($fixture, ['email' => 'bang!literal@example.test']);
+        $percent = $this->createConfiguredPortalUser($fixture, ['email' => 'percent%literal@example.test']);
+        $underscore = $this->createConfiguredPortalUser($fixture, [
             'email' => 'under_score@example.test',
             'status' => PortalUser::STATUS_SUSPENDED,
         ]);
@@ -491,7 +491,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_status_update_rejects_unsupported_status_and_server_fields(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'immutable@example.test',
         ]);
@@ -525,7 +525,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_status_update_rejects_unknown_top_level_fields_without_mutation(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'strict-status@example.test',
         ]);
@@ -550,7 +550,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_status_update_rejects_empty_unknown_root_values_without_mutation(mixed $value): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'strict-empty-status@example.test',
         ]);
@@ -574,7 +574,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_suspension_revokes_tokens_and_reactivation_does_not_issue_one(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'status@example.test',
         ]);
@@ -619,11 +619,11 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_disabling_portal_revokes_every_tenant_portal_token(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $first = $this->createPortalUser($fixture, [
+        $first = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'first@example.test',
         ]);
-        $second = $this->createPortalUser($fixture, ['email' => 'second@example.test']);
+        $second = $this->createConfiguredPortalUser($fixture, ['email' => 'second@example.test']);
         $first->createToken('first');
         $second->createToken('second');
         $revokedBeforeAudit = false;
@@ -652,7 +652,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_disabling_portal_does_not_revoke_foreign_tenant_tokens(): void
     {
         $foreign = $this->portalFixture(['portal.manage']);
-        $foreignUser = $this->createPortalUser($foreign, [
+        $foreignUser = $this->createConfiguredPortalUser($foreign, [
             'contact_id' => $foreign['contact']->id,
             'email' => 'foreign-token@example.test',
         ]);
@@ -660,7 +660,7 @@ class PortalConfigurationTest extends PortalTestCase
 
         $this->app['auth']->forgetGuards();
         $local = $this->portalFixture(['portal.manage']);
-        $localUser = $this->createPortalUser($local, [
+        $localUser = $this->createConfiguredPortalUser($local, [
             'contact_id' => $local['contact']->id,
             'email' => 'local-token@example.test',
         ]);
@@ -678,7 +678,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_status_and_deactivation_roll_back_token_revocation_when_audit_fails(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'rollback@example.test',
         ]);
@@ -720,7 +720,7 @@ class PortalConfigurationTest extends PortalTestCase
     public function test_portal_principal_is_rejected_before_tenant_membership_lookup(): void
     {
         $fixture = $this->portalFixture(['contacts.view', 'portal.manage']);
-        $portalUser = $this->createPortalUser($fixture, [
+        $portalUser = $this->createConfiguredPortalUser($fixture, [
             'contact_id' => $fixture['contact']->id,
             'email' => 'principal@example.test',
         ]);
@@ -761,7 +761,7 @@ class PortalConfigurationTest extends PortalTestCase
      * @param  array<string, mixed>  $attributes
      * @param  array<string, mixed>  $contactAttributes
      */
-    private function createPortalUser(
+    private function createConfiguredPortalUser(
         array $fixture,
         array $attributes = [],
         array $contactAttributes = [],

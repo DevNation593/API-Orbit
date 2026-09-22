@@ -52,6 +52,7 @@ use App\Policies\TaskPolicy;
 use App\Policies\TicketPolicy;
 use App\Services\ExistingSupportEscalationNotifier;
 use App\Services\IntegrationManager;
+use App\Support\PortalToken;
 use App\Support\TenantContext;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -123,6 +124,9 @@ class AppServiceProvider extends ServiceProvider
             Limit::perMinute(60)->by((string) $request->route('basePublicId').'|'.$request->ip()),
             Limit::perDay(1000)->by((string) $request->route('basePublicId').'|'.$request->ip()),
         ]);
+        RateLimiter::for('portal-invitation', fn ($request) => Limit::perMinute(20)->by(
+            PortalToken::hash((string) $request->route('token')).'|'.$request->ip(),
+        ));
 
         Event::listen(ContactCreated::class, DispatchAutomation::class);
         Event::listen(LeadCreated::class, DispatchAutomation::class);
