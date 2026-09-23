@@ -20,6 +20,7 @@ use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
+use LogicException;
 use stdClass;
 use Throwable;
 
@@ -32,18 +33,18 @@ class PortalInvitationService
      */
     public function invite(Contact $contact, User $actor): array
     {
+        $this->assertNoAmbientTransaction();
         $plainToken = PortalToken::issue();
         $result = DB::transaction(function () use ($contact, $actor, $plainToken): array {
-            $locked = Contact::query()->lockForUpdate()->findOrFail($contact->id);
             $portal = CustomerPortal::query()
-                ->where('is_active', true)
                 ->lockForUpdate()
                 ->first();
             abort_if(
-                $portal === null,
+                $portal === null || ! $portal->is_active,
                 409,
                 'Activate the customer portal before inviting contacts.',
             );
+            $locked = Contact::query()->lockForUpdate()->findOrFail($contact->id);
 
             $email = PortalEmail::normalize($locked->email);
             throw_if($email === null, ValidationException::withMessages([
@@ -148,12 +149,11 @@ class PortalInvitationService
                         );
                     }
 
-                    $contact = Contact::withTrashed()
-                        ->forTenant((int) $locator->tenant_id)
-                        ->find($invitation->contact_id);
-                    if ($contact === null) {
-                        return $this->errorResult(404, 'Resource not found.');
+                    $contactResult = $this->invitationContactResult($locator, $invitation);
+                    if (isset($contactResult['error_status'])) {
+                        return $contactResult;
                     }
+                    $contact = $contactResult['contact'];
 
                     return ['profile' => [
                         'portal_public_id' => $portal->public_id,
@@ -176,50 +176,42 @@ class PortalInvitationService
      */
     public function accept(string $token, array $data): array
     {
-        try {
-            $result = $this->withLocatedInvitation(
-                $token,
-                function (stdClass $locator, string $tokenHash) use ($data): array {
-                    $result = DB::transaction(function () use ($locator, $tokenHash, $data): array {
-                        $invitation = $this->lockedInvitation($locator, $tokenHash);
-                        if ($invitation === null) {
-                            return $this->errorResult(404, 'Resource not found.');
-                        }
+        $this->assertNoAmbientTransaction();
+        $result = $this->withLocatedInvitation(
+            $token,
+            function (stdClass $locator, string $tokenHash) use ($data): array {
+                $result = DB::transaction(function () use ($locator, $tokenHash, $data): array {
+                    $portal = CustomerPortal::forTenant((int) $locator->tenant_id)
+                        ->lockForUpdate()
+                        ->first();
+                    $invitation = $this->lockedInvitation($locator, $tokenHash);
+                    if ($invitation === null) {
+                        return $this->errorResult(404, 'Resource not found.');
+                    }
 
-                        if ($stateError = $this->invitationStateError($invitation)) {
-                            return $stateError;
-                        }
+                    if ($stateError = $this->invitationStateError($invitation)) {
+                        return $stateError;
+                    }
 
-                        $portal = CustomerPortal::forTenant((int) $locator->tenant_id)
-                            ->where('is_active', true)
-                            ->lockForUpdate()
-                            ->first();
-                        if ($portal === null) {
-                            return $this->errorResult(
-                                409,
-                                'The customer portal is not active.',
-                            );
-                        }
+                    if ($portal === null || ! $portal->is_active) {
+                        return $this->errorResult(
+                            409,
+                            'The customer portal is not active.',
+                        );
+                    }
 
-                        $contact = Contact::withTrashed()
-                            ->forTenant((int) $locator->tenant_id)
-                            ->whereKey($invitation->contact_id)
-                            ->lockForUpdate()
-                            ->first();
-                        $currentEmail = PortalEmail::normalize($contact?->email);
-                        if (
-                            $contact === null
-                            || $contact->trashed()
-                            || $currentEmail === null
-                            || ! hash_equals($invitation->email, $currentEmail)
-                        ) {
-                            return $this->errorResult(
-                                422,
-                                'The invitation contact or email is no longer valid.',
-                                'contact_id',
-                            );
-                        }
+                    $contactResult = $this->invitationContactResult(
+                        $locator,
+                        $invitation,
+                        lockForUpdate: true,
+                    );
+                    if (isset($contactResult['error_status'])) {
+                        return $contactResult;
+                    }
+                    $contact = $contactResult['contact'];
+                    $currentEmail = $contactResult['email'];
 
+                    try {
                         $portalUser = PortalUser::create([
                             'contact_id' => $contact->id,
                             'email' => $currentEmail,
@@ -227,38 +219,41 @@ class PortalInvitationService
                             'status' => PortalUser::STATUS_ACTIVE,
                             'email_verified_at' => now(),
                         ]);
-                        $portalUser->setRelation('contact', $contact);
-                        $invitation->update([
-                            'status' => PortalInvitation::STATUS_ACCEPTED,
-                            'accepted_at' => now(),
-                        ]);
-                        $this->audit->record(
-                            'portal.invitation.accepted',
-                            $invitation,
-                            newValues: [
-                                'contact_id' => $contact->id,
-                                'email' => $currentEmail,
-                                'status' => PortalInvitation::STATUS_ACCEPTED,
-                                'accepted_at' => $invitation->accepted_at,
-                            ],
-                            actor: $portalUser,
+                    } catch (QueryException $exception) {
+                        if (! $this->isPortalUserIdentityConflict($exception)) {
+                            throw $exception;
+                        }
+
+                        abort(
+                            409,
+                            'A portal account already exists for this contact or email.',
                         );
+                    }
+                    $portalUser->setRelation('contact', $contact);
+                    $invitation->update([
+                        'status' => PortalInvitation::STATUS_ACCEPTED,
+                        'accepted_at' => now(),
+                    ]);
+                    $this->audit->record(
+                        'portal.invitation.accepted',
+                        $invitation,
+                        newValues: [
+                            'contact_id' => $contact->id,
+                            'email' => $currentEmail,
+                            'status' => PortalInvitation::STATUS_ACCEPTED,
+                            'accepted_at' => $invitation->accepted_at,
+                        ],
+                        actor: $portalUser,
+                    );
 
-                        return ['portal' => $portal, 'user' => $portalUser];
-                    });
+                    return ['portal' => $portal, 'user' => $portalUser];
+                });
 
-                    $this->throwResultError($result);
+                $this->throwResultError($result);
 
-                    return $result;
-                },
-            );
-        } catch (QueryException $exception) {
-            if (! $this->isPortalUserIdentityConflict($exception)) {
-                throw $exception;
-            }
-
-            abort(409, 'A portal account already exists for this contact or email.');
-        }
+                return $result;
+            },
+        );
 
         $expiresAt = CarbonImmutable::now()->addDays(30);
         $deviceName = filled($data['device_name'] ?? null)
@@ -315,6 +310,39 @@ class PortalInvitationService
             ->where('token_hash', $tokenHash)
             ->lockForUpdate()
             ->first();
+    }
+
+    /**
+     * @return array{contact: Contact, email: string}|array{error_status: int, error_message: string, error_field: string}
+     */
+    private function invitationContactResult(
+        stdClass $locator,
+        PortalInvitation $invitation,
+        bool $lockForUpdate = false,
+    ): array {
+        $query = Contact::withTrashed()
+            ->forTenant((int) $locator->tenant_id)
+            ->whereKey($invitation->contact_id);
+        if ($lockForUpdate) {
+            $query->lockForUpdate();
+        }
+
+        $contact = $query->first();
+        $currentEmail = PortalEmail::normalize($contact?->email);
+        if (
+            $contact === null
+            || $contact->trashed()
+            || $currentEmail === null
+            || ! hash_equals($invitation->email, $currentEmail)
+        ) {
+            return $this->errorResult(
+                422,
+                'The invitation contact or email is no longer valid.',
+                'contact_id',
+            );
+        }
+
+        return ['contact' => $contact, 'email' => $currentEmail];
     }
 
     /** @return array{error_status: int, error_message: string, error_field?: string}|null */
@@ -380,6 +408,13 @@ class PortalInvitationService
             return false;
         }
 
+        if (preg_match(
+            '/\Ainsert\s+into\s+(?:"portal_users"|`portal_users`|\[portal_users\]|portal_users)\s*\(/i',
+            trim($exception->getSql()),
+        ) !== 1) {
+            return false;
+        }
+
         if (in_array($exception->index, [
             'portal_users_contact_unique',
             'portal_users_email_unique',
@@ -396,6 +431,21 @@ class PortalInvitationService
     private function contactName(Contact $contact): string
     {
         return trim($contact->first_name.' '.$contact->last_name);
+    }
+
+    private function assertNoAmbientTransaction(): void
+    {
+        $connectionName = DB::connection()->getName();
+        $hasAmbientTransaction = app('db.transactions')
+            ->callbackApplicableTransactions()
+            ->contains(
+                fn ($transaction): bool => $transaction->connection === $connectionName,
+            );
+        if ($hasAmbientTransaction) {
+            throw new LogicException(
+                'Portal invitation use cases cannot run inside an ambient transaction.',
+            );
+        }
     }
 
     private function withLocatedInvitation(string $token, Closure $callback): mixed

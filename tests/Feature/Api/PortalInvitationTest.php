@@ -7,18 +7,21 @@ use App\Models\Contact;
 use App\Models\PortalInvitation;
 use App\Models\PortalUser;
 use App\Notifications\PortalInvitationNotification;
+use App\Services\PortalInvitationService;
 use App\Support\TenantContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Database\QueryException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
+use LogicException;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -146,6 +149,45 @@ class PortalInvitationTest extends PortalTestCase
         $this->assertDatabaseCount('portal_invitations', 1);
         $this->assertDatabaseCount('portal_invitation_locators', 1);
         $this->assertDatabaseHas('audit_logs', ['action' => 'portal.user.invited']);
+    }
+
+    public function test_invite_rejects_an_ambient_transaction_before_token_generation_or_mutation(): void
+    {
+        Notification::fake();
+        $fixture = $this->portalFixture(['portal.manage']);
+        $baseTransactionLevel = DB::transactionLevel();
+        $tokenGenerated = false;
+        $caught = null;
+        $auditCount = DB::table('audit_logs')->count();
+        Str::createRandomStringsUsing(function (int $length) use (&$tokenGenerated): string {
+            $tokenGenerated = true;
+
+            return str_repeat('R', $length);
+        });
+        DB::beginTransaction();
+
+        try {
+            try {
+                app(PortalInvitationService::class)->invite(
+                    $fixture['contact'],
+                    $fixture['user'],
+                );
+            } catch (LogicException $exception) {
+                $caught = $exception;
+            }
+
+            $this->assertInstanceOf(LogicException::class, $caught);
+            $this->assertFalse($tokenGenerated);
+            $this->assertDatabaseCount('portal_invitations', 0);
+            $this->assertDatabaseCount('portal_invitation_locators', 0);
+            $this->assertSame($auditCount, DB::table('audit_logs')->count());
+            Notification::assertNothingSent();
+        } finally {
+            while (DB::transactionLevel() > $baseTransactionLevel) {
+                DB::rollBack();
+            }
+            Str::createRandomStringsNormally();
+        }
     }
 
     #[DataProvider('forbiddenInvitationRootKeys')]
@@ -310,6 +352,61 @@ class PortalInvitationTest extends PortalTestCase
         $this->getJson('/api/v1/portal/invitations/'.$secondToken)->assertOk();
     }
 
+    public function test_invite_and_accept_query_the_portal_before_downstream_locked_rows(): void
+    {
+        Notification::fake();
+        $fixture = $this->portalFixture(['portal.manage']);
+        $queries = [];
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = mb_strtolower($query->sql);
+        });
+        $service = app(PortalInvitationService::class);
+
+        $invited = $service->invite($fixture['contact'], $fixture['user']);
+        $inviteQueries = $queries;
+        $queries = [];
+        $token = Str::afterLast($invited['activation_url'], '/');
+        $service->accept($token, [
+            'password' => 'Portal-Password!2026',
+            'password_confirmation' => 'Portal-Password!2026',
+        ]);
+        $acceptQueries = $queries;
+
+        $invitePortal = collect($inviteQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "customer_portals"'),
+        );
+        $inviteContact = collect($inviteQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "contacts"'),
+        );
+        $inviteInvitation = collect($inviteQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "portal_invitations"'),
+        );
+        $acceptPortal = collect($acceptQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "customer_portals"'),
+        );
+        $acceptInvitation = collect($acceptQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "portal_invitations"'),
+        );
+        $acceptContact = collect($acceptQueries)->search(
+            fn (string $sql): bool => str_contains($sql, 'from "contacts"'),
+        );
+
+        foreach ([
+            $invitePortal,
+            $inviteContact,
+            $inviteInvitation,
+            $acceptPortal,
+            $acceptInvitation,
+            $acceptContact,
+        ] as $index) {
+            $this->assertIsInt($index);
+        }
+        $this->assertLessThan($inviteContact, $invitePortal);
+        $this->assertLessThan($inviteInvitation, $invitePortal);
+        $this->assertLessThan($acceptInvitation, $acceptPortal);
+        $this->assertLessThan($acceptContact, $acceptPortal);
+    }
+
     public function test_internal_list_filters_sorts_and_paginates_without_serializing_secrets(): void
     {
         $fixture = $this->portalFixture(['portal.manage']);
@@ -398,6 +495,47 @@ class PortalInvitationTest extends PortalTestCase
         }
     }
 
+    #[DataProvider('unknownInvitationListValues')]
+    public function test_internal_list_rejects_every_unknown_query_key_by_presence(
+        string $query,
+    ): void {
+        $fixture = $this->portalFixture(['portal.manage']);
+
+        $this->internalApi($fixture)
+            ->getJson('/api/v1/customer-portal/invitations?'.$query)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['unexpected']);
+    }
+
+    public function test_internal_list_pagination_appends_only_validated_filters(): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $secondContact = Contact::factory()->create([
+            'tenant_id' => $fixture['tenant']->id,
+            'email' => 'second-pending@example.test',
+        ]);
+        $this->storedInvitation($fixture);
+        $this->storedInvitation($fixture, $secondContact);
+        Paginator::queryStringResolver(function (): never {
+            throw new RuntimeException('Raw request query strings must not be appended.');
+        });
+
+        try {
+            $this->internalApi($fixture)
+                ->getJson(
+                    '/api/v1/customer-portal/invitations'
+                    .'?status=PENDING&sort=created_at&direction=asc&per_page=1&page=1',
+                )
+                ->assertOk()
+                ->assertJsonCount(1, 'data')
+                ->assertJsonPath('meta.current_page', 1)
+                ->assertJsonPath('meta.per_page', 1)
+                ->assertJsonPath('meta.total', 2);
+        } finally {
+            Paginator::queryStringResolver(fn (): array => app('request')->query());
+        }
+    }
+
     public function test_revoke_is_idempotent_for_revoked_but_conflicts_for_accepted_and_is_tenant_safe(): void
     {
         $foreign = $this->portalFixture(['portal.manage']);
@@ -470,6 +608,38 @@ class PortalInvitationTest extends PortalTestCase
 
         $this->getJson('/api/v1/portal/invitations/not-valid')->assertNotFound();
         $this->getJson('/api/v1/portal/invitations/'.str_repeat('z', 64))->assertNotFound();
+    }
+
+    #[DataProvider('invalidInspectionContactStates')]
+    public function test_public_inspection_rejects_an_invalid_current_contact_without_exposing_stale_data(
+        string $state,
+    ): void {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $fixture['contact']->update([
+            'first_name' => 'Sensitive',
+            'last_name' => 'Contact',
+            'email' => 'snapshot@example.test',
+        ]);
+        $stored = $this->storedInvitation($fixture);
+
+        if ($state === 'deleted') {
+            $fixture['contact']->delete();
+        } else {
+            $fixture['contact']->update(['email' => 'changed@example.test']);
+        }
+
+        $response = $this->getJson('/api/v1/portal/invitations/'.$stored['token'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['contact_id']);
+
+        $serialized = $response->getContent();
+        foreach (['Sensitive Contact', 'snapshot@example.test', 's*******@example.test'] as $stale) {
+            $this->assertStringNotContainsString($stale, $serialized);
+        }
+        $this->assertDatabaseHas('portal_invitations', [
+            'id' => $stored['invitation']->id,
+            'status' => 'PENDING',
+        ]);
     }
 
     #[DataProvider('unusableInvitationStatuses')]
@@ -679,6 +849,58 @@ class PortalInvitationTest extends PortalTestCase
         }
     }
 
+    public function test_accept_rejects_an_ambient_transaction_without_mutating_domain_or_session_state(): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $stored = $this->storedInvitation($fixture);
+        $baseTransactionLevel = DB::transactionLevel();
+        $sessionTokenAttempted = false;
+        $caught = null;
+        $invitationBefore = (array) DB::table('portal_invitations')
+            ->where('id', $stored['invitation']->id)
+            ->first();
+        $contactBefore = (array) DB::table('contacts')
+            ->where('id', $fixture['contact']->id)
+            ->first();
+        $auditCount = DB::table('audit_logs')->count();
+        $sanctumTokenCount = DB::table('personal_access_tokens')->count();
+        PersonalAccessToken::creating(function () use (&$sessionTokenAttempted): void {
+            $sessionTokenAttempted = true;
+        });
+        DB::beginTransaction();
+
+        try {
+            try {
+                app(PortalInvitationService::class)->accept($stored['token'], [
+                    'password' => 'Portal-Password!2026',
+                    'password_confirmation' => 'Portal-Password!2026',
+                ]);
+            } catch (LogicException $exception) {
+                $caught = $exception;
+            }
+
+            $this->assertInstanceOf(LogicException::class, $caught);
+            $this->assertFalse($sessionTokenAttempted);
+            $this->assertDatabaseCount('portal_users', 0);
+            $this->assertSame($auditCount, DB::table('audit_logs')->count());
+            $this->assertSame($sanctumTokenCount, DB::table('personal_access_tokens')->count());
+            $this->assertSame(
+                $invitationBefore,
+                (array) DB::table('portal_invitations')
+                    ->where('id', $stored['invitation']->id)
+                    ->first(),
+            );
+            $this->assertSame(
+                $contactBefore,
+                (array) DB::table('contacts')->where('id', $fixture['contact']->id)->first(),
+            );
+        } finally {
+            while (DB::transactionLevel() > $baseTransactionLevel) {
+                DB::rollBack();
+            }
+        }
+    }
+
     #[DataProvider('forbiddenAcceptanceRootKeys')]
     public function test_acceptance_rejects_every_extra_root_key_by_presence(
         string $field,
@@ -720,6 +942,45 @@ class PortalInvitationTest extends PortalTestCase
         ])->assertUnprocessable()->assertJsonValidationErrors(['device_name']);
 
         $this->assertDatabaseCount('portal_users', 0);
+    }
+
+    #[DataProvider('secretDeviceNames')]
+    public function test_acceptance_rejects_a_device_name_containing_the_current_invitation_token(
+        bool $exactMatch,
+    ): void {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $token = str_repeat('T', 64);
+        $stored = $this->storedInvitation($fixture, token: $token);
+        $deviceName = $exactMatch ? $token : 'Laptop-'.$token.'-browser';
+        $invitationBefore = (array) DB::table('portal_invitations')
+            ->where('id', $stored['invitation']->id)
+            ->first();
+        $contactBefore = (array) DB::table('contacts')
+            ->where('id', $fixture['contact']->id)
+            ->first();
+        $auditCount = DB::table('audit_logs')->count();
+        $sanctumTokenCount = DB::table('personal_access_tokens')->count();
+
+        $this->postJson('/api/v1/portal/invitations/'.$token.'/accept', [
+            'password' => 'Portal-Password!2026',
+            'password_confirmation' => 'Portal-Password!2026',
+            'device_name' => $deviceName,
+        ])->assertUnprocessable()->assertJsonValidationErrors(['device_name']);
+
+        $this->assertDatabaseCount('portal_users', 0);
+        $this->assertSame($auditCount, DB::table('audit_logs')->count());
+        $this->assertSame($sanctumTokenCount, DB::table('personal_access_tokens')->count());
+        $this->assertSame(
+            $invitationBefore,
+            (array) DB::table('portal_invitations')
+                ->where('id', $stored['invitation']->id)
+                ->first(),
+        );
+        $this->assertSame(
+            $contactBefore,
+            (array) DB::table('contacts')->where('id', $fixture['contact']->id)->first(),
+        );
+        $this->assertDatabaseDoesNotContainPlaintext($token);
     }
 
     public function test_acceptance_revalidates_active_portal_contact_and_current_normalized_email(): void
@@ -831,6 +1092,52 @@ class PortalInvitationTest extends PortalTestCase
             $this->assertStringContainsString('portal_users_unrelated_unique', $exception->index ?? '');
         }
 
+        $this->assertDatabaseCount('portal_users', 0);
+        $this->assertDatabaseHas('portal_invitations', [
+            'id' => $stored['invitation']->id,
+            'status' => 'PENDING',
+        ]);
+    }
+
+    public function test_same_column_unique_violation_from_another_table_is_rethrown(): void
+    {
+        $fixture = $this->portalFixture(['portal.manage']);
+        $stored = $this->storedInvitation($fixture);
+        DB::statement(<<<'SQL'
+            CREATE TABLE unrelated_identity_records (
+                tenant_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                UNIQUE (tenant_id, contact_id)
+            )
+        SQL);
+        DB::table('unrelated_identity_records')->insert([
+            'tenant_id' => $fixture['tenant']->id,
+            'contact_id' => $fixture['contact']->id,
+        ]);
+        PortalUser::creating(function () use ($fixture): void {
+            DB::table('unrelated_identity_records')->insert([
+                'tenant_id' => $fixture['tenant']->id,
+                'contact_id' => $fixture['contact']->id,
+            ]);
+        });
+        $this->withoutExceptionHandling();
+
+        $caught = null;
+        try {
+            $this->postJson('/api/v1/portal/invitations/'.$stored['token'].'/accept', [
+                'password' => 'Portal-Password!2026',
+                'password_confirmation' => 'Portal-Password!2026',
+            ]);
+        } catch (QueryException $exception) {
+            $caught = $exception;
+        }
+
+        $this->assertInstanceOf(UniqueConstraintViolationException::class, $caught);
+        $this->assertStringContainsString(
+            'unrelated_identity_records',
+            $caught->getSql(),
+        );
+        $this->assertSame(['tenant_id', 'contact_id'], $caught->columns);
         $this->assertDatabaseCount('portal_users', 0);
         $this->assertDatabaseHas('portal_invitations', [
             'id' => $stored['invitation']->id,
@@ -963,6 +1270,35 @@ class PortalInvitationTest extends PortalTestCase
         ];
     }
 
+    /** @return array<string, array{string}> */
+    public static function invalidInspectionContactStates(): array
+    {
+        return [
+            'soft deleted contact' => ['deleted'],
+            'changed normalized email' => ['changed_email'],
+        ];
+    }
+
+    /** @return array<string, array{string}> */
+    public static function unknownInvitationListValues(): array
+    {
+        return [
+            'non-empty string' => ['unexpected=blocked'],
+            'empty string' => ['unexpected='],
+            'null-style key without a value' => ['unexpected'],
+            'array' => ['unexpected[]=nested'],
+        ];
+    }
+
+    /** @return array<string, array{bool}> */
+    public static function secretDeviceNames(): array
+    {
+        return [
+            'exact token' => [true],
+            'token contained in a larger name' => [false],
+        ];
+    }
+
     /**
      * @param  array{tenant: mixed, user: mixed, contact: Contact}  $fixture
      * @param  array<string, mixed>  $attributes
@@ -1014,5 +1350,21 @@ class PortalInvitationTest extends PortalTestCase
         };
 
         $walk($payload);
+    }
+
+    private function assertDatabaseDoesNotContainPlaintext(string $plaintext): void
+    {
+        $tables = collect(DB::select(
+            "select name from sqlite_master where type = 'table' and name not like 'sqlite_%'",
+        ))->pluck('name');
+
+        foreach ($tables as $table) {
+            $serialized = json_encode(DB::table((string) $table)->get(), JSON_THROW_ON_ERROR);
+            $this->assertStringNotContainsString(
+                $plaintext,
+                $serialized,
+                'Plaintext secret was persisted in '.$table.'.',
+            );
+        }
     }
 }

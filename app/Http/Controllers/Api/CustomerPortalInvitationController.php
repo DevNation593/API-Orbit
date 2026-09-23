@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\PortalInvitationIndexRequest;
 use App\Http\Requests\PortalInvitationRequest;
 use App\Http\Resources\PortalInvitationAdminResource;
 use App\Models\Contact;
@@ -13,8 +14,8 @@ use App\Support\ApiResponse;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Validation\Rule;
 
 class CustomerPortalInvitationController extends Controller
 {
@@ -22,25 +23,9 @@ class CustomerPortalInvitationController extends Controller
         private readonly PortalInvitationService $invitationService,
     ) {}
 
-    public function index(Request $request): JsonResponse
+    public function index(PortalInvitationIndexRequest $request): JsonResponse
     {
-        Gate::authorize('viewAny', PortalInvitation::class);
-        $filters = $request->validate([
-            'status' => ['sometimes', Rule::in([
-                PortalInvitation::STATUS_PENDING,
-                PortalInvitation::STATUS_ACCEPTED,
-                PortalInvitation::STATUS_REVOKED,
-                PortalInvitation::STATUS_EXPIRED,
-            ])],
-            'contact_id' => ['sometimes', 'integer', 'min:1'],
-            'created_from' => ['sometimes', 'date'],
-            'created_to' => ['sometimes', 'date'],
-            'expires_before' => ['sometimes', 'date'],
-            'sort' => ['sometimes', Rule::in(['created_at', 'expires_at'])],
-            'direction' => ['sometimes', Rule::in(['asc', 'desc'])],
-            'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'between:1,100'],
-        ]);
+        $filters = $request->validated();
         $query = PortalInvitation::query()->with([
             'contact:id,tenant_id,first_name,last_name,email',
         ]);
@@ -78,7 +63,7 @@ class CustomerPortalInvitationController extends Controller
         $page = $query->orderBy('portal_invitations.'.$sort, $direction)
             ->orderBy('portal_invitations.id', $direction)
             ->paginate($filters['per_page'] ?? 25)
-            ->withQueryString();
+            ->appends(Arr::except($filters, ['page']));
         $page->through(
             fn (PortalInvitation $invitation): array => (new PortalInvitationAdminResource(
                 $invitation,
