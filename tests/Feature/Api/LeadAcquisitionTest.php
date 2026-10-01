@@ -158,7 +158,7 @@ it('routes leads deterministically and keeps candidates tenant safe', function (
     $api->postJson('/api/v1/leads/'.$secondLead.'/route')->assertOk()->assertJsonPath('data.selected_user_id', $second->id);
     expect(Lead::findOrFail($first)->owner_id)->toBe($client['user']->id)
         ->and(Lead::findOrFail($secondLead)->owner_id)->toBe($second->id)
-        ->and(LeadRoutingAction::query()->sum('assignments_count'))->toBe(2);
+        ->and((int) LeadRoutingAction::query()->sum('assignments_count'))->toBe(2);
 
     $this->app['auth']->forgetGuards();
     $foreignLead = $this->withToken($foreign['token'])->withHeader('X-Tenant-ID', (string) $foreign['tenant']->id)
