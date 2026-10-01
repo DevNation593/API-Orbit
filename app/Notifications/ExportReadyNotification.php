@@ -11,9 +11,10 @@ class ExportReadyNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public string $queue = 'notifications';
-
-    public function __construct(public readonly ExportBatch $batch) {}
+    public function __construct(public readonly ExportBatch $batch)
+    {
+        $this->onQueue('notifications');
+    }
 
     public function via(object $notifiable): array
     {
@@ -22,6 +23,15 @@ class ExportReadyNotification extends Notification implements ShouldQueue
 
     public function toArray(object $notifiable): array
     {
-        return ['type' => 'export.ready', 'batch_id' => $this->batch->id, 'status' => $this->batch->status, 'path' => $this->batch->path];
+        return [
+            'tenant_id' => $this->batch->tenant_id,
+            'event' => 'export.ready',
+            'type' => 'export.ready',
+            'title' => 'Exportación lista',
+            'body' => 'El archivo de exportación ya está disponible.',
+            'batch_id' => $this->batch->id,
+            'status' => $this->batch->status,
+            'path' => $this->batch->path,
+        ];
     }
 }

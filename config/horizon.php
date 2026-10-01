@@ -218,7 +218,19 @@ return [
         ],
         'supervisor-integrations' => [
             'connection' => 'redis', 'queue' => ['integrations'], 'balance' => 'auto',
-            'maxProcesses' => 4, 'tries' => 3, 'timeout' => 120,
+            'maxProcesses' => 4, 'tries' => 3, 'timeout' => 240,
+        ],
+        'supervisor-sequences' => [
+            'connection' => 'redis', 'queue' => ['sequences'], 'balance' => 'auto',
+            'maxProcesses' => 4, 'tries' => 5, 'timeout' => 300,
+        ],
+        'supervisor-documents' => [
+            'connection' => 'redis', 'queue' => ['documents'], 'balance' => 'simple',
+            'maxProcesses' => 2, 'tries' => 3, 'timeout' => 300, 'memory' => 256,
+        ],
+        'supervisor-marketing' => [
+            'connection' => 'redis', 'queue' => ['marketing'], 'balance' => 'auto',
+            'maxProcesses' => 2, 'tries' => 3, 'timeout' => 300, 'memory' => 256,
         ],
         'supervisor-support' => [
             'connection' => 'redis', 'queue' => ['support'], 'balance' => 'simple',
@@ -243,7 +255,10 @@ return [
             ],
             'supervisor-automations' => ['maxProcesses' => 10],
             'supervisor-integrations' => ['maxProcesses' => 8],
+            'supervisor-sequences' => ['maxProcesses' => 8],
+            'supervisor-marketing' => ['maxProcesses' => 4],
             'supervisor-support' => ['maxProcesses' => 4],
+            'supervisor-documents' => ['maxProcesses' => 4],
             'supervisor-imports' => ['maxProcesses' => 4],
             'supervisor-exports' => ['maxProcesses' => 4],
         ],

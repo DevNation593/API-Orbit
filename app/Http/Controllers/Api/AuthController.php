@@ -57,7 +57,7 @@ class AuthController extends Controller
                 'joined_at' => now(),
             ]);
 
-            return [$user, $tenant, $user->createToken('crm-web')->plainTextToken];
+            return [$user, $tenant, $user->createToken('vantex-web')->plainTextToken];
         });
         $this->audit->record('create', 'Tenant', $tenant->id, newValues: ['name' => $tenant->name], tenantId: $tenant->id);
 
@@ -87,9 +87,9 @@ class AuthController extends Controller
             return ApiResponse::error('The user has no access to the requested tenant.', [], 403);
         }
 
-        $user->tokens()->where('name', $data['device_name'] ?? 'crm-web')->delete();
-        $token = $user->createToken($data['device_name'] ?? 'crm-web')->plainTextToken;
-        $this->audit->record('login', 'User', $user->id, newValues: ['device_name' => $data['device_name'] ?? 'crm-web'], tenantId: $tenant->id);
+        $user->tokens()->where('name', $data['device_name'] ?? 'vantex-web')->delete();
+        $token = $user->createToken($data['device_name'] ?? 'vantex-web')->plainTextToken;
+        $this->audit->record('login', 'User', $user->id, newValues: ['device_name' => $data['device_name'] ?? 'vantex-web'], tenantId: $tenant->id);
 
         return ApiResponse::success([
             'token' => $token,
