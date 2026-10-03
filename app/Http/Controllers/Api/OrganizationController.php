@@ -26,7 +26,7 @@ class OrganizationController extends Controller
     public function index(OrganizationRequest $request): JsonResponse
     {
         $this->authorize('viewAny', Organization::class);
-        $query = Organization::query()->with(['owner:id,name']);
+        $query = Organization::query()->with($this->relations());
         $query = $this->filters->apply($query, $request, [
             'name' => 'organizations.name', 'email' => 'organizations.email',
             'phone' => 'organizations.phone', 'owner_id' => 'organizations.owner_id',
@@ -51,12 +51,12 @@ class OrganizationController extends Controller
             return $organization;
         });
 
-        return ApiResponse::success($organization->load(['owner:id,name', 'contacts:id,first_name,last_name']), [], 201);
+        return ApiResponse::success($organization->load($this->relations(true)), [], 201);
     }
 
     public function show(int $id): JsonResponse
     {
-        $organization = Organization::query()->with(['owner:id,name', 'contacts:id,first_name,last_name'])->findOrFail($id);
+        $organization = Organization::query()->with($this->relations(true))->findOrFail($id);
         $this->authorize('view', $organization);
 
         return ApiResponse::success($organization);
@@ -86,7 +86,7 @@ class OrganizationController extends Controller
         });
         $this->audit->record('update', $organization, oldValues: $old, newValues: $organization->getAttributes());
 
-        return ApiResponse::success($organization->fresh()->load(['owner:id,name', 'contacts:id,first_name,last_name']));
+        return ApiResponse::success($organization->fresh()->load($this->relations(true)));
     }
 
     public function destroy(int $id): JsonResponse
@@ -121,5 +121,19 @@ class OrganizationController extends Controller
         $tenantId = app(TenantContext::class)->requireId();
 
         return collect($ids)->mapWithKeys(fn (int $id): array => [$id => ['tenant_id' => $tenantId]])->all();
+    }
+
+    /** @return array<int, string> */
+    private function relations(bool $contacts = false): array
+    {
+        $relations = ['owner:id,name'];
+        if ($contacts) {
+            $relations[] = 'contacts:id,first_name,last_name';
+        }
+        if (request()->user()?->hasPermission('tags.view')) {
+            $relations[] = 'tags:id,name,color';
+        }
+
+        return $relations;
     }
 }

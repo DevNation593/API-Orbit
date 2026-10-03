@@ -19,4 +19,9 @@ abstract class BaseApiRequest extends FormRequest
             ->where('tenant_id', app(TenantContext::class)->requireId())
             ->where('status', 'active'));
     }
+
+    protected function effectiveInput(string $key, mixed $fallback = null): mixed
+    {
+        return array_key_exists($key, $this->all()) ? $this->input($key) : $fallback;
+    }
 }

@@ -2,11 +2,17 @@
 
 namespace App\Support;
 
+use App\Models\Activity;
 use App\Models\Contact;
+use App\Models\Conversation;
 use App\Models\Deal;
 use App\Models\EntityRecord;
+use App\Models\FileRecord;
 use App\Models\Lead;
 use App\Models\Organization;
+use App\Models\Product;
+use App\Models\Quote;
+use App\Models\Task;
 use Illuminate\Validation\ValidationException;
 
 final class TenantRelationResolver
@@ -15,12 +21,30 @@ final class TenantRelationResolver
     private const STANDARD_TYPES = [
         'contact' => Contact::class,
         'contacts' => Contact::class,
+        'conversation' => Conversation::class,
+        'conversations' => Conversation::class,
         'organization' => Organization::class,
         'organizations' => Organization::class,
+        'company' => Organization::class,
+        'companies' => Organization::class,
         'lead' => Lead::class,
         'leads' => Lead::class,
         'deal' => Deal::class,
         'deals' => Deal::class,
+        'opportunity' => Deal::class,
+        'opportunities' => Deal::class,
+        'task' => Task::class,
+        'tasks' => Task::class,
+        'activity' => Activity::class,
+        'activities' => Activity::class,
+        'file' => FileRecord::class,
+        'files' => FileRecord::class,
+        'document' => FileRecord::class,
+        'documents' => FileRecord::class,
+        'product' => Product::class,
+        'products' => Product::class,
+        'quote' => Quote::class,
+        'quotes' => Quote::class,
     ];
 
     public function canonicalMorphType(?string $type, mixed $id): ?string
@@ -48,9 +72,15 @@ final class TenantRelationResolver
 
             return match ($model) {
                 Contact::class => 'contact',
+                Conversation::class => 'conversation',
                 Organization::class => 'organization',
                 Lead::class => 'lead',
                 Deal::class => 'deal',
+                Task::class => 'task',
+                Activity::class => 'activity',
+                FileRecord::class => 'file',
+                Product::class => 'product',
+                Quote::class => 'quote',
             };
         }
 

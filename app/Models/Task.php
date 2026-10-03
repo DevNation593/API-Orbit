@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTags;
 use App\Models\Concerns\TenantScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,7 +12,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Task extends Model
 {
-    use HasFactory, SoftDeletes, TenantScoped;
+    use HasFactory, HasTags, SoftDeletes, TenantScoped;
 
     protected $fillable = ['title', 'description', 'assigned_to', 'created_by', 'status', 'priority', 'due_at', 'completed_at', 'related_type', 'related_id', 'custom_fields'];
 

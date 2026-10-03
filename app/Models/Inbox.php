@@ -35,6 +35,11 @@ class Inbox extends Model
         return $this->belongsTo(Role::class, 'default_role_id');
     }
 
+    public function channels(): HasMany
+    {
+        return $this->hasMany(InboxChannel::class);
+    }
+
     public function conversations(): HasMany
     {
         return $this->hasMany(Conversation::class);

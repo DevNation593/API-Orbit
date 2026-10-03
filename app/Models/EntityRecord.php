@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTags;
 use App\Models\Concerns\TenantScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class EntityRecord extends Model
 {
-    use HasFactory, SoftDeletes, TenantScoped;
+    use HasFactory, HasTags, SoftDeletes, TenantScoped;
 
     protected $fillable = ['entity_definition_id', 'data', 'created_by', 'updated_by'];
 
