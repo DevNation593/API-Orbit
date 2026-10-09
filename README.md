@@ -54,6 +54,8 @@ Ejemplo:
 
 En Docker, el backend publica hacia Reverb usando `REVERB_HOST=reverb`; el frontend debe usar `VITE_REVERB_HOST=localhost`.
 
+Los canales privados se autorizan en `POST /api/v1/broadcasting/auth` con el mismo token Bearer del API, no con sesión web. Las notificaciones de un usuario llegan por `App.Models.User.{id}` y los eventos de la bandeja por `tenants.{tenantId}.inbox`.
+
 Redis se configura únicamente con `REDIS_URL`. La URL puede incluir usuario, contraseña, puerto, base y TLS, por ejemplo `redis://redis:6379` en Docker o `rediss://usuario:contraseña@host:6380/0` en un proveedor administrado. La aplicación usa `phpredis` cuando la extensión está disponible y cambia automáticamente a `predis` en entornos como PHP para Windows.
 
 PostgreSQL se configura únicamente con `DATABASE_URL`, incluyendo protocolo, credenciales, host, puerto, base y opciones SSL. Por ejemplo: `postgresql://crm:change-me@postgres:5432/crm` en Docker o `postgresql://usuario:contraseña@host:5432/base?sslmode=require` en un proveedor administrado. Los caracteres especiales de usuario y contraseña deben codificarse para URL.
