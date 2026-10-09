@@ -5,6 +5,7 @@ namespace App\Listeners;
 use App\Events\ContactCreated;
 use App\Events\DealStageChanged;
 use App\Events\LeadCreated;
+use App\Events\QuoteAccepted;
 use App\Events\TaskCompleted;
 use App\Jobs\RunAutomationJob;
 use App\Models\Automation;
@@ -12,12 +13,13 @@ use App\Support\TenantContext;
 
 class DispatchAutomation
 {
-    public function handle(ContactCreated|LeadCreated|DealStageChanged|TaskCompleted $event): void
+    public function handle(ContactCreated|LeadCreated|DealStageChanged|TaskCompleted|QuoteAccepted $event): void
     {
         $model = match (true) {
             $event instanceof ContactCreated => $event->contact,
             $event instanceof LeadCreated => $event->lead,
             $event instanceof TaskCompleted => $event->task,
+            $event instanceof QuoteAccepted => $event->quote,
             default => $event->deal,
         };
 

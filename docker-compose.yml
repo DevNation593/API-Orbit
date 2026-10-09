@@ -1,7 +1,12 @@
+x-runtime-environment: &runtime-environment
+  DATABASE_URL: "${DATABASE_URL:-postgresql://crm:change-me@postgres:5432/crm}"
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
 services:
   app:
     build: .
     env_file: .env
+    environment: *runtime-environment
     ports:
       - "8000:8000"
     volumes:
@@ -19,6 +24,7 @@ services:
   queue:
     build: .
     env_file: .env
+    environment: *runtime-environment
     volumes:
       - .:/var/www/html
       - vendor-data:/var/www/html/vendor
@@ -26,9 +32,21 @@ services:
       - app
     command: php artisan horizon
 
+  scheduler:
+    build: .
+    env_file: .env
+    environment: *runtime-environment
+    volumes:
+      - .:/var/www/html
+      - vendor-data:/var/www/html/vendor
+    depends_on:
+      - app
+    command: php artisan schedule:work
+
   reverb:
     build: .
     env_file: .env
+    environment: *runtime-environment
     ports:
       - "8080:8080"
     volumes:

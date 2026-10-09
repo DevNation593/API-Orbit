@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTags;
 use App\Models\Concerns\TenantScoped;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,13 +12,17 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Deal extends Model
 {
-    use HasFactory, SoftDeletes, TenantScoped;
+    use HasFactory, HasTags, SoftDeletes, TenantScoped;
 
-    protected $fillable = ['pipeline_id', 'stage_id', 'owner_id', 'contact_id', 'organization_id', 'name', 'value', 'currency', 'status', 'expected_close_date', 'custom_fields'];
+    protected $fillable = [
+        'pipeline_id', 'stage_id', 'owner_id', 'sales_team_id', 'branch_id', 'territory_id',
+        'contact_id', 'organization_id', 'name', 'value', 'currency', 'status', 'forecast_category',
+        'expected_close_date', 'closed_at', 'custom_fields',
+    ];
 
     protected function casts(): array
     {
-        return ['value' => 'decimal:2', 'expected_close_date' => 'date', 'custom_fields' => 'array'];
+        return ['value' => 'decimal:2', 'expected_close_date' => 'date', 'closed_at' => 'datetime', 'custom_fields' => 'array'];
     }
 
     public function tenant(): BelongsTo
@@ -38,6 +43,21 @@ class Deal extends Model
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
+    }
+
+    public function team(): BelongsTo
+    {
+        return $this->belongsTo(SalesTeam::class, 'sales_team_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class);
+    }
+
+    public function territory(): BelongsTo
+    {
+        return $this->belongsTo(Territory::class);
     }
 
     public function contact(): BelongsTo

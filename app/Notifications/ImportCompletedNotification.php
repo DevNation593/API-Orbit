@@ -12,9 +12,10 @@ class ImportCompletedNotification extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public string $queue = 'notifications';
-
-    public function __construct(public readonly ImportBatch $batch) {}
+    public function __construct(public readonly ImportBatch $batch)
+    {
+        $this->onQueue('notifications');
+    }
 
     public function via(object $notifiable): array
     {
@@ -23,7 +24,16 @@ class ImportCompletedNotification extends Notification implements ShouldQueue
 
     public function toArray(object $notifiable): array
     {
-        return ['type' => 'import.completed', 'batch_id' => $this->batch->id, 'status' => $this->batch->status, 'summary' => $this->batch->summary];
+        return [
+            'tenant_id' => $this->batch->tenant_id,
+            'event' => 'import.completed',
+            'type' => 'import.completed',
+            'title' => 'Importación completada',
+            'body' => 'El proceso de importación terminó con estado '.$this->batch->status.'.',
+            'batch_id' => $this->batch->id,
+            'status' => $this->batch->status,
+            'summary' => $this->batch->summary,
+        ];
     }
 
     public function toBroadcast(object $notifiable): BroadcastMessage

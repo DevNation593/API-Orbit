@@ -39,6 +39,7 @@ class ActivityController extends Controller
             $data['activityable_id'] ?? null,
         );
         $data['user_id'] ??= $request->user()->id;
+        $data['occurred_at'] ??= now();
         $activity = Activity::create($data);
         $this->audit->record('create', $activity, newValues: $activity->getAttributes());
 

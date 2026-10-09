@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Events\LeadCreated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ConvertLeadRequest;
 use App\Http\Requests\LeadRequest;
@@ -13,6 +12,7 @@ use App\Models\Organization;
 use App\Models\Pipeline;
 use App\Models\PipelineStage;
 use App\Services\CustomFieldService;
+use App\Services\LeadCaptureService;
 use App\Support\ApiResponse;
 use App\Support\AuditService;
 use App\Support\QueryFilters;
@@ -23,6 +23,7 @@ class LeadController extends Controller
 {
     public function __construct(
         private readonly CustomFieldService $customFields,
+        private readonly LeadCaptureService $capture,
         private readonly QueryFilters $filters,
         private readonly AuditService $audit,
         private readonly DatabaseManager $database,
@@ -47,15 +48,21 @@ class LeadController extends Controller
         $data = $request->validated();
         $data['custom_fields'] = $this->customFields->validateAndNormalise('leads', $data['custom_fields'] ?? []);
         $this->assertTenantRelations($data);
-        $lead = $this->database->transaction(function () use ($data): Lead {
-            $lead = Lead::create($data);
-            $this->audit->record('create', $lead, newValues: $lead->getAttributes());
-            LeadCreated::dispatch($lead);
+        $attribution = array_intersect_key($data, array_flip(LeadCaptureService::ATTRIBUTION_FIELDS));
+        $result = $this->capture->capture(
+            $data,
+            $data['capture_origin'] ?? 'manual',
+            $attribution,
+            $request->header('Idempotency-Key'),
+            duplicateStrategy: $data['duplicate_strategy'] ?? 'create',
+        );
+        $lead = $result['lead']->load(['owner:id,name', 'contact:id,first_name,last_name', 'organization:id,name']);
 
-            return $lead;
-        });
-
-        return ApiResponse::success($lead->load(['owner:id,name', 'contact:id,first_name,last_name', 'organization:id,name']), [], 201);
+        return ApiResponse::success($lead, [
+            'created' => $result['created'],
+            'replayed' => $result['replayed'],
+            'capture_event_id' => (int) $result['capture']->id,
+        ], $result['created'] ? 201 : 200);
     }
 
     public function show(int $id): JsonResponse

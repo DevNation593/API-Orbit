@@ -33,7 +33,7 @@ class FileController extends Controller
         $request->validate([
             'file' => ['required', 'file', 'max:51200', 'mimes:pdf,doc,docx,xls,xlsx,csv,txt,jpg,jpeg,png,webp'],
             'related_type' => ['nullable', 'string', 'max:120'],
-            'related_id' => ['nullable', 'string', 'max:120'],
+            'related_id' => ['nullable', 'integer', 'min:1'],
         ]);
         $relatedType = $this->relations->canonicalMorphType($request->input('related_type'), $request->input('related_id'));
         $uploaded = $request->file('file');

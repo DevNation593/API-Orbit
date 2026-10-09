@@ -27,7 +27,7 @@ class ContactController extends Controller
     public function index(ContactRequest $request): JsonResponse
     {
         $this->authorize('viewAny', Contact::class);
-        $query = Contact::query()->with(['owner:id,name', 'organizations:id,name']);
+        $query = Contact::query()->with($this->relations());
         $query = $this->filters->apply($query, $request, [
             'first_name' => 'contacts.first_name', 'last_name' => 'contacts.last_name',
             'email' => 'contacts.email', 'phone' => 'contacts.phone',
@@ -54,12 +54,12 @@ class ContactController extends Controller
             return $contact;
         });
 
-        return ApiResponse::success($contact->load(['owner:id,name', 'organizations:id,name']), [], 201);
+        return ApiResponse::success($contact->load($this->relations()), [], 201);
     }
 
     public function show(int $id): JsonResponse
     {
-        $contact = Contact::query()->with(['owner:id,name', 'organizations:id,name'])->findOrFail($id);
+        $contact = Contact::query()->with($this->relations())->findOrFail($id);
         $this->authorize('view', $contact);
 
         return ApiResponse::success($contact);
@@ -89,7 +89,7 @@ class ContactController extends Controller
         });
         $this->audit->record('update', $contact, oldValues: $old, newValues: $contact->getAttributes());
 
-        return ApiResponse::success($contact->fresh()->load(['owner:id,name', 'organizations:id,name']));
+        return ApiResponse::success($contact->fresh()->load($this->relations()));
     }
 
     public function destroy(int $id): JsonResponse
@@ -124,5 +124,16 @@ class ContactController extends Controller
         $tenantId = app(TenantContext::class)->requireId();
 
         return collect($ids)->mapWithKeys(fn (int $id): array => [$id => ['tenant_id' => $tenantId]])->all();
+    }
+
+    /** @return array<int, string> */
+    private function relations(): array
+    {
+        $relations = ['owner:id,name', 'organizations:id,name'];
+        if (request()->user()?->hasPermission('tags.view')) {
+            $relations[] = 'tags:id,name,color';
+        }
+
+        return $relations;
     }
 }

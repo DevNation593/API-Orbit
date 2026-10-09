@@ -12,7 +12,7 @@ class ActivityRequest extends BaseApiRequest
             'subject' => ['nullable', 'string', 'max:190'],
             'body' => ['nullable', 'string', 'max:20000'],
             'activityable_type' => ['nullable', 'string', 'max:120', 'required_with:activityable_id'],
-            'activityable_id' => ['nullable', 'string', 'max:120', 'required_with:activityable_type'],
+            'activityable_id' => ['nullable', 'integer', 'min:1', 'required_with:activityable_type'],
             'occurred_at' => ['nullable', 'date'],
             'metadata' => ['sometimes', 'array'],
         ];

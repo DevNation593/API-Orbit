@@ -53,6 +53,10 @@ abstract class PortalTestCase extends TestCase
     /** @param array{token: string, tenant: Tenant} $fixture */
     protected function internalApi(array $fixture): static
     {
+        // Fixtures create contacts, whose observer resolves auth()->id() and would
+        // re-cache the guard with the previous request's user.
+        $this->app['auth']->forgetGuards();
+
         return $this->withToken($fixture['token'])
             ->withHeader('X-Tenant-ID', (string) $fixture['tenant']->id);
     }

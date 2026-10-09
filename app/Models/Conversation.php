@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTags;
 use App\Models\Concerns\TenantScoped;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Conversation extends Model
 {
-    use TenantScoped;
+    use HasTags, TenantScoped;
 
     protected $fillable = [
         'inbox_id', 'inbox_channel_id', 'contact_id', 'assigned_user_id', 'assigned_role_id',
@@ -33,6 +35,11 @@ class Conversation extends Model
         return $this->belongsTo(Inbox::class);
     }
 
+    public function inboxChannel(): BelongsTo
+    {
+        return $this->belongsTo(InboxChannel::class, 'inbox_channel_id');
+    }
+
     public function contact(): BelongsTo
     {
         return $this->belongsTo(Contact::class);
@@ -46,5 +53,25 @@ class Conversation extends Model
     public function assignedRole(): BelongsTo
     {
         return $this->belongsTo(Role::class, 'assigned_role_id');
+    }
+
+    public function participants(): HasMany
+    {
+        return $this->hasMany(ConversationParticipant::class);
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(Message::class);
+    }
+
+    public function assignments(): HasMany
+    {
+        return $this->hasMany(ConversationAssignment::class);
+    }
+
+    public function reads(): HasMany
+    {
+        return $this->hasMany(ConversationRead::class);
     }
 }
