@@ -6,6 +6,7 @@ use App\Models\Pipeline;
 use App\Models\Role;
 use App\Models\TenantUser;
 use App\Models\User;
+use App\Support\AuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -245,4 +246,54 @@ it('creates reusable tags and assigns them idempotently to tenant records', func
     $this->withToken($client['token'])->withHeader('X-Tenant-ID', (string) $client['tenant']->id)
         ->deleteJson('/api/v1/tags/'.$tag['id'].'/assignments/'.$assignment['id'])->assertOk();
     $this->assertDatabaseMissing('tag_assignments', ['id' => $assignment['id']]);
+});
+
+it('reports only the fields an update actually changed in audit timeline events', function (): void {
+    $client = $this->createTenantUser();
+    $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', (string) $client['tenant']->id);
+    $contact = $api->postJson('/api/v1/contacts', [
+        'first_name' => 'Ada', 'last_name' => 'Lovelace', 'email' => 'ada@acme.test', 'phone' => '+593 99 111 1111',
+    ])->assertCreated()->json('data');
+
+    $this->travel(1)->minutes();
+    $api->patchJson('/api/v1/contacts/'.$contact['id'], ['phone' => '+593 99 222 2222'])->assertOk();
+
+    $events = $api->getJson('/api/v1/contacts/'.$contact['id'].'/timeline?source=audit&event=audit.update')
+        ->assertOk()->assertJsonCount(1, 'data')->json('data');
+    expect($events[0]['metadata']['changed_fields'])
+        ->toEqualCanonicalizing(['phone', 'phone_normalized', 'updated_at']);
+});
+
+it('ignores representation-only differences between audit snapshots', function (): void {
+    $client = $this->createTenantUser();
+    $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', (string) $client['tenant']->id);
+    $contact = $api->postJson('/api/v1/contacts', ['first_name' => 'Ada'])->assertCreated()->json('data');
+
+    app(AuditService::class)->record('update', 'contacts', $contact['id'], tenantId: $client['tenant']->id, oldValues: [
+        'first_name' => 'Ada', 'owner_id' => 7, 'active' => 1,
+        'custom_fields' => '{"tier": "gold", "ruc": "1790011223001"}', 'phone' => '0991111111',
+        'settings' => '{"code": "0912"}',
+    ], newValues: [
+        'first_name' => 'Ada', 'owner_id' => '7', 'active' => true,
+        'custom_fields' => '{"ruc":"1790011223001","tier":"gold"}', 'phone' => '991111111',
+        'settings' => '{"code":"912"}',
+    ]);
+
+    $events = $api->getJson('/api/v1/contacts/'.$contact['id'].'/timeline?source=audit&event=audit.update')
+        ->assertOk()->assertJsonCount(1, 'data')->json('data');
+    expect($events[0]['metadata']['changed_fields'])->toBe(['phone', 'settings']);
+});
+
+it('does not report untouched snapshot keys when an audit entry stores partial new values', function (): void {
+    $client = $this->createTenantUser();
+    $api = $this->withToken($client['token'])->withHeader('X-Tenant-ID', (string) $client['tenant']->id);
+    $contact = $api->postJson('/api/v1/contacts', ['first_name' => 'Ada'])->assertCreated()->json('data');
+
+    app(AuditService::class)->record('merge', 'contacts', $contact['id'], tenantId: $client['tenant']->id, oldValues: [
+        'id' => $contact['id'], 'first_name' => 'Ada', 'status' => 'active',
+    ], newValues: ['source_id' => 99, 'status' => 'active']);
+
+    $events = $api->getJson('/api/v1/contacts/'.$contact['id'].'/timeline?source=audit&event=audit.merge')
+        ->assertOk()->assertJsonCount(1, 'data')->json('data');
+    expect($events[0]['metadata']['changed_fields'])->toBe(['source_id']);
 });

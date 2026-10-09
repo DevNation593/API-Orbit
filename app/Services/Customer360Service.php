@@ -389,12 +389,52 @@ final class Customer360Service
             'body' => null,
             'entity' => ['type' => $log->entity_type, 'id' => $log->entity_id],
             'actor' => $log->user,
-            'metadata' => ['changed_fields' => array_values(array_unique(array_merge(
-                array_keys($log->old_values ?? []),
-                array_keys($log->new_values ?? []),
-            )))],
+            'metadata' => ['changed_fields' => $this->changedFields($log)],
             'occurred_at' => $log->created_at->toISOString(),
         ];
+    }
+
+    /**
+     * Updates store the full model snapshot on both sides, so only the keys whose value differs count as changed.
+     *
+     * @return array<int, string>
+     */
+    private function changedFields(AuditLog $log): array
+    {
+        $old = $log->old_values;
+        $new = $log->new_values;
+        if ($old === null || $new === null) {
+            return array_keys($old ?? $new ?? []);
+        }
+
+        return array_keys(array_filter(
+            $new,
+            fn (mixed $value, string $field): bool => ! array_key_exists($field, $old)
+                || $this->comparable($old[$field]) !== $this->comparable($value),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+    }
+
+    /**
+     * Snapshots mix the database and the request representation of the same value: 7 and "7", 1 and true,
+     * or a JSON column re-encoded with another key order. Two strings are never coerced, so "099" and "99" differ.
+     */
+    private function comparable(mixed $value): mixed
+    {
+        if (is_string($value) && is_array($decoded = json_decode($value, true))) {
+            $value = $decoded;
+        }
+        if (is_array($value)) {
+            ksort($value);
+
+            return array_map(fn (mixed $item): mixed => is_array($item) ? $this->comparable($item) : $item, $value);
+        }
+
+        if (is_bool($value)) {
+            $value = (int) $value;
+        }
+
+        return is_int($value) || is_float($value) ? (string) $value : $value;
     }
 
     /** @return array<string, mixed> */
