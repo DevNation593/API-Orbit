@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTags;
 use App\Models\Concerns\TenantScoped;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -15,9 +16,14 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
-    use HasFactory, SoftDeletes, TenantScoped;
+    use HasFactory, HasTags, SoftDeletes, TenantScoped;
 
-    protected $fillable = ['name', 'legal_name', 'email', 'phone', 'website', 'owner_id', 'custom_fields'];
+    protected $fillable = ['name', 'legal_name', 'email', 'phone', 'website', 'owner_id', 'territory_id', 'industry', 'custom_fields'];
+
+    protected $hidden = [
+        'email_normalized', 'phone_normalized', 'name_normalized', 'website_normalized',
+        'identification_normalized', 'tax_id_normalized',
+    ];
 
     protected function casts(): array
     {
@@ -32,6 +38,11 @@ class Organization extends Model
     public function tenant(): BelongsTo
     {
         return $this->belongsTo(Tenant::class);
+    }
+
+    public function territory(): BelongsTo
+    {
+        return $this->belongsTo(Territory::class);
     }
 
     public function contacts(): BelongsToMany

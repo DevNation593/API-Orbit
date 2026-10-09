@@ -9,13 +9,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      DB_CONNECTION: pgsql
-      DB_HOST: 127.0.0.1
-      DB_PORT: 5432
-      DB_DATABASE: crm_test
-      DB_USERNAME: crm
-      DB_PASSWORD: crm
-      REDIS_HOST: 127.0.0.1
+      DATABASE_URL: postgresql://crm:crm@127.0.0.1:5432/crm_test
+      REDIS_URL: redis://127.0.0.1:6379
     services:
       postgres:
         image: postgres:16

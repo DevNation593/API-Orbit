@@ -44,8 +44,14 @@ class WebhookEndpointController extends Controller
             return $endpoint;
         });
         $this->audit->record('integration_change', $endpoint, newValues: ['name' => $endpoint->name, 'url' => $endpoint->url, 'events' => $endpoint->events]);
+        $ingressToken = hash_hmac('sha256', (string) $endpoint->id, $secret);
+        $ingressUrl = rtrim((string) config('app.url'), '/').'/api/v1/webhooks/incoming/'.$endpoint->id.'/'.$ingressToken;
 
-        return ApiResponse::success(['endpoint' => $endpoint, 'signing_secret' => $secret], [], 201);
+        return ApiResponse::success([
+            'endpoint' => $endpoint,
+            'signing_secret' => $secret,
+            'ingress_url' => $ingressUrl,
+        ], [], 201);
     }
 
     public function update(WebhookEndpointRequest $request, int $id): JsonResponse
